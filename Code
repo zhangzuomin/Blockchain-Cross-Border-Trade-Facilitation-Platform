@@ -1,0 +1,3527 @@
+1. 结算风险预警模块关键代码
+<!doctype html>
+<html lang="zh">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>区块链跨境贸易便利化平台 - 结算风险预警</title>
+  <link href="https://cdnjs.onmicrosoft.cn/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,700|Roboto+Mono:400,700&amp;display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://jsd.onmicrosoft.cn/npm/alpinejs@3.13.10/dist/cdn.min.js" defer></script>
+  <script src="https://jsd.onmicrosoft.cn/npm/chart.js"></script>
+  <style>
+        body {
+            font-family: 'Roboto', 'Inter', Arial, sans-serif;
+            background: linear-gradient(120deg, #CFD8DC 0%, #FFFFFF 100%);
+        }
+        .card-glass {
+            background-color: rgba(3, 169, 244, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid #03A9F4;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(1, 87, 155, 0.10), 0 0 8px 2px #03A9F480, 0 0 2px 1px #00C85320 inset;
+        }
+        .main-title {
+            font-family: 'Roboto', 'Inter', Arial, sans-serif;
+            font-weight: bold;
+            font-size: 2.3rem;
+            color: #01579B;
+            text-shadow: 0 2px 4px #03A9F440;
+        }
+        .section-title {
+            font-weight: 700;
+            color: #01579B;
+            letter-spacing: 0.04em;
+            font-size: 1.15rem;
+        }
+        .report-title {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #03A9F4;
+            text-shadow: 0 1px 2px #00C85330;
+        }
+        .mono {
+            font-family: 'Roboto Mono', monospace;
+            color: #00C853;
+            font-size: 1.05em;
+            text-shadow: 0 1px 3px #03A9F420;
+        }
+        .pulse {
+            box-shadow: 0 0 8px 1px #03A9F480;
+            animation: pulse 1.3s infinite alternate;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 8px 1px #03A9F480; }
+            100% { box-shadow: 0 0 16px 3px #03A9F4; }
+        }
+        .download-btn {
+            background: linear-gradient(90deg, #03A9F4 0%, #00C853 100%);
+            color: #fff;
+            border-radius: 8px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px #03A9F440;
+            transition: transform .15s;
+        }
+        .download-btn:hover {
+            transform: scale(1.05);
+            background: linear-gradient(90deg, #FF6D00 0%, #03A9F4 100%);
+            box-shadow: 0 4px 16px #FF6D0030;
+        }
+        .icon-btn {
+            border-radius: 8px;
+            transition: background .15s, transform .12s;
+        }
+        .icon-btn:hover {
+            background: #03A9F430;
+            transform: scale(1.07);
+        }
+        /* Dialog overlay */
+        .dialog-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(3,169,244,0.17);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .dialog-card {
+            background: rgba(255,255,255,0.97);
+            border-radius: 10px;
+            box-shadow: 0 4px 24px #03A9F420, 0 0 12px #00C85320;
+            max-width: 400px;
+            min-width: 330px;
+            padding: 2rem 1.5rem 1.5rem 1.5rem;
+            border: 2px solid #03A9F4;
+            position: relative;
+        }
+        .dialog-close {
+            position: absolute;
+            top: 1rem;
+            right: 1.1rem;
+            font-size: 1.3rem;
+            color: #01579B;
+            cursor: pointer;
+        }
+    </style>
+ </head>
+ <body class="min-h-screen">
+  <div class="w-full px-6 py-7 flex flex-col gap-10">
+   <!-- 主标题 -->
+   <div class="flex items-center gap-4">
+    <i class="fas fa-shield-alt text-3xl text-[#03A9F4] pulse"></i> <span class="main-title">结算风险预警系统</span>
+   </div> <!-- 实时监控面板 -->
+   <section class="card-glass shadow-xl p-6 md:p-7 flex flex-col gap-6" id="monitor-panel">
+    <div class="flex items-center justify-between mb-4">
+     <span class="section-title">实时跨境支付状态监控</span> <button id="step1-btn" class="icon-btn px-3 py-2 text-[#01579B] flex items-center gap-2" onclick="showDialog('dialog1')"> <i class="fas fa-info-circle"></i> 查看详情 </button>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-7">
+     <div class="flex flex-col items-start gap-2">
+      <span class="text-[#03A9F4] font-bold">当前支付状态</span> <span class="mono">已完成：83笔</span> <span class="mono">处理中：6笔</span> <span class="mono">异常：2笔</span>
+     </div>
+     <div class="flex flex-col items-start gap-2">
+      <span class="text-[#03A9F4] font-bold">实时外汇波动</span>
+      <canvas id="fxChart" height="60"></canvas>
+     </div>
+     <div class="flex flex-col items-start gap-2">
+      <span class="text-[#03A9F4] font-bold">预警状态</span> <span class="mono">汇率偏离：<span id="alert-fx" class="text-[#FF6D00]">触发</span></span> <span class="mono">信用评级：<span class="text-[#00C853]">安全</span></span> <span class="mono">政策变动：<span id="alert-policy" class="text-[#FF6D00]">警告</span></span>
+     </div>
+    </div>
+   </section> <!-- 预警触发器卡片 -->
+   <section class="card-glass shadow-xl p-6 md:p-7" id="trigger-panel">
+    <div class="flex items-center justify-between mb-4">
+     <span class="section-title">预警触发器</span> <button id="step2-btn" class="icon-btn px-3 py-2 text-[#01579B] flex items-center gap-2" onclick="showDialog('dialog2')"> <i class="fas fa-exclamation-triangle"></i> 预警明细 </button>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-7">
+     <div class="flex items-center gap-3">
+      <i class="fas fa-chart-line text-[#03A9F4] text-2xl"></i>
+      <div>
+       <span class="text-[#01579B] font-semibold">汇率偏离</span>
+       <div class="text-[#FF6D00] font-bold">
+        超阈值
+       </div> <span class="text-xs text-[#CFD8DC]">USD/CNY: 7.21 ↑</span>
+      </div>
+     </div>
+     <div class="flex items-center gap-3">
+      <i class="fas fa-user-shield text-[#00C853] text-2xl"></i>
+      <div>
+       <span class="text-[#01579B] font-semibold">信用评级</span>
+       <div class="text-[#00C853] font-bold">
+        正常
+       </div> <span class="text-xs text-[#CFD8DC]">最近下调：无</span>
+      </div>
+     </div>
+     <div class="flex items-center gap-3">
+      <i class="fas fa-gavel text-[#FF6D00] text-2xl"></i>
+      <div>
+       <span class="text-[#01579B] font-semibold">监管政策</span>
+       <div class="text-[#FF6D00] font-bold">
+        变更警告
+       </div> <span class="text-xs text-[#CFD8DC]">新规生效：2025-03-28</span>
+      </div>
+     </div>
+    </div>
+   </section> <!-- 风险评估报告生成器 -->
+   <section class="card-glass shadow-xl p-6 md:p-7" id="report-panel">
+    <div class="flex items-center justify-between mb-4">
+     <span class="section-title">风险评估报告</span> <button id="step3-btn" class="download-btn px-4 py-2 flex items-center gap-2" onclick="showDialog('dialog3')"> <i class="fas fa-file-download"></i> 生成/下载报告 </button>
+    </div>
+    <div class="flex flex-col md:flex-row gap-7">
+     <div class="flex-1">
+      <div class="report-title mb-2">
+       SWIFT报文解析
+      </div>
+      <pre class="mono bg-[#01579B] bg-opacity-10 rounded-lg p-4 shadow-inner text-sm overflow-x-auto">{1:F01BANKDEFFXXXX0000000000}{2:I103BANKCNBXAXXXN}{4:
+:20:20250328TRANS001
+:23B:CRED
+:32A:250328CNY1000000,00
+:50K:/1020000001234
+高坚
+:59:/2040000005678
+贾姬瑾
+:71A:OUR
+}
+                    </pre>
+     </div>
+     <div class="flex-1 flex flex-col gap-2">
+      <div class="report-title mb-2">
+       多维度风险分析
+      </div>
+      <ul class="list-disc pl-6 text-[#01579B]">
+       <li>外汇波动风险指数：<span class="mono">0.82</span></li>
+       <li>信用评级风险指数：<span class="mono">0.21</span></li>
+       <li>政策变动影响指数：<span class="mono">0.67</span></li>
+       <li>历史违约率（近一年）：<span class="mono">0.5%</span></li>
+       <li>资金冻结概率预测：<span class="mono">0.3%</span></li>
+      </ul>
+     </div>
+    </div>
+   </section> <!-- 机器学习模型展示 -->
+   <section class="card-glass shadow-xl p-6 md:p-7" id="ml-panel" x-data="{riskWeight: 0.64, fxWeight: 0.82, creditWeight: 0.21, policyWeight: 0.67}">
+    <div class="flex items-center justify-between mb-4">
+     <span class="section-title">机器学习模型参数调整</span> <button id="step4-btn" class="icon-btn px-3 py-2 text-[#01579B] flex items-center gap-2" onclick="showDialog('dialog4')"> <i class="fas fa-sliders-h"></i> 模型调整说明 </button>
+    </div>
+    <div class="flex flex-col gap-6 md:flex-row md:gap-8">
+     <div class="flex-1 flex flex-col gap-2">
+      <label class="text-[#03A9F4] font-medium">外汇权重</label> <input type="range" min="0" max="1" step="0.01" x-model="fxWeight" class="w-full accent-[#03A9F4] mt-1">
+      <div class="mono">
+       当前值：<span x-text="fxWeight"></span>
+      </div>
+     </div>
+     <div class="flex-1 flex flex-col gap-2">
+      <label class="text-[#03A9F4] font-medium">信用权重</label> <input type="range" min="0" max="1" step="0.01" x-model="creditWeight" class="w-full accent-[#00C853] mt-1">
+      <div class="mono">
+       当前值：<span x-text="creditWeight"></span>
+      </div>
+     </div>
+     <div class="flex-1 flex flex-col gap-2">
+      <label class="text-[#03A9F4] font-medium">政策权重</label> <input type="range" min="0" max="1" step="0.01" x-model="policyWeight" class="w-full accent-[#FF6D00] mt-1">
+      <div class="mono">
+       当前值：<span x-text="policyWeight"></span>
+      </div>
+     </div>
+    </div>
+    <div class="mt-6">
+     <canvas id="mlChart" height="60"></canvas>
+    </div>
+   </section> <!-- 关联性图片 -->
+   <div class="flex justify-center py-6">
+    <img src="https://images.pexels.com/photos/11279906/pexels-photo-11279906.jpeg" alt="跨境金融科技交易数据流" class="rounded-lg shadow-xl w-full max-w-xl border-[3px] border-[#03A9F4]">
+   </div>
+  </div> <!-- 对话框1：实时监控详情 -->
+  <div id="dialog1" class="dialog-overlay" style="display:none;">
+   <div class="dialog-card">
+    <span class="dialog-close" onclick="closeDialog('dialog1')"><i class="fas fa-times"></i></span>
+    <div class="font-bold text-[#01579B] text-lg mb-3 flex items-center gap-2">
+     <i class="fas fa-info-circle text-[#03A9F4]"></i>实时监控详情
+    </div>
+    <div class="text-sm text-[#01579B] mb-3">
+     系统正在自动追踪每一笔跨境支付状态，包括已完成、处理中和异常交易。若发现异常支付，系统将实时推送通知并分析异常原因。
+    </div>
+    <div class="bg-[#03A9F4] bg-opacity-10 rounded p-3 text-[#03A9F4]">
+     <ul class="list-disc pl-6">
+      <li>交易编号：TRANS001，状态：异常，原因：汇率剧烈波动</li>
+      <li>交易编号：TRANS002，状态：异常，原因：政策变更导致延迟</li>
+     </ul>
+    </div>
+   </div>
+  </div> <!-- 对话框2：预警明细 -->
+  <div id="dialog2" class="dialog-overlay" style="display:none;">
+   <div class="dialog-card">
+    <span class="dialog-close" onclick="closeDialog('dialog2')"><i class="fas fa-times"></i></span>
+    <div class="font-bold text-[#FF6D00] text-lg mb-3 flex items-center gap-2">
+     <i class="fas fa-exclamation-triangle text-[#FF6D00]"></i>预警触发明细
+    </div>
+    <div class="text-sm text-[#01579B] mb-3">
+     系统检测到汇率偏离预设阈值，部分付款方评级下调，且最新监管政策已变更。建议立即评估受影响交易，并联系相关方确认资金安全。
+    </div>
+    <div class="bg-[#FF6D00] bg-opacity-10 rounded p-3 text-[#FF6D00]">
+     <ul class="list-disc pl-6">
+      <li>汇率偏离：USD/CNY超出0.5%阈值</li>
+      <li>信用评级：部分付款方评级下调</li>
+      <li>政策变更：新外汇管理政策生效</li>
+     </ul>
+    </div>
+   </div>
+  </div> <!-- 对话框3：报告生成与下载 -->
+  <div id="dialog3" class="dialog-overlay" style="display:none;">
+   <div class="dialog-card">
+    <span class="dialog-close" onclick="closeDialog('dialog3')"><i class="fas fa-times"></i></span>
+    <div class="font-bold text-[#03A9F4] text-lg mb-3 flex items-center gap-2">
+     <i class="fas fa-file-download"></i>生成并下载风险评估报告
+    </div>
+    <div class="text-sm text-[#01579B] mb-3">
+     系统已根据最新交易数据动态生成多维度风险评估报告，包括SWIFT报文解析和历史交易分析结果。可点击下方按钮下载报告。
+    </div> <button class="download-btn w-full py-2 mt-2 flex items-center justify-center gap-2" onclick="downloadReport()"> <i class="fas fa-download"></i> 下载PDF报告 </button>
+    <div class="mt-3 text-xs text-[#01579B] text-center">
+     下载功能仅支持当前风险评估报告，报告内容不包含敏感信息。
+    </div>
+   </div>
+  </div> <!-- 对话框4：模型调整说明 -->
+  <div id="dialog4" class="dialog-overlay" style="display:none;">
+   <div class="dialog-card">
+    <span class="dialog-close" onclick="closeDialog('dialog4')"><i class="fas fa-times"></i></span>
+    <div class="font-bold text-[#00C853] text-lg mb-3 flex items-center gap-2">
+     <i class="fas fa-sliders-h"></i>模型参数调整说明
+    </div>
+    <div class="text-sm text-[#01579B] mb-3">
+     您可通过滑块灵活调整各风险因子的权重，系统将自动计算最新风险系数并实时更新分析模型。此操作有助于根据实际市场动态优化预警规则。
+    </div>
+    <div class="bg-[#00C853] bg-opacity-10 rounded p-3 text-[#00C853]">
+     <ul class="list-disc pl-6">
+      <li>外汇权重高：外汇变动影响更大</li>
+      <li>信用权重高：付款方违约风险更敏感</li>
+      <li>政策权重高：政策变动影响加重</li>
+     </ul>
+    </div>
+   </div>
+  </div>
+  <script>
+        const fxChartCtx = document.getElementById('fxChart').getContext('2d');
+        let fxChart = new Chart(fxChartCtx, {
+            type: 'line',
+            data: {
+                labels: ['09:00','10:00','11:00','12:00','13:00','14:00','15:00'],
+                datasets: [{
+                    label: 'USD/CNY',
+                    data: [7.19,7.20,7.21,7.22,7.21,7.20,7.21],
+                    backgroundColor: '#03A9F420',
+                    borderColor: '#03A9F4',
+                    borderWidth: 2,
+                    pointRadius: 2.2,
+                    pointBackgroundColor: '#FF6D00',
+                    tension: 0.38,
+                }]
+            },
+            options: {
+                maintainAspectRatio: true,
+                responsive: true,
+                plugins: {
+                    legend: {display: false},
+                },
+                scales: {
+                    x: {grid: {color: '#CFD8DC30'}},
+                    y: {
+                        min: 7.18,
+                        max: 7.23,
+                        grid: {color: '#CFD8DC30'},
+                        ticks: {color: '#01579B', font: {family: 'Roboto Mono'}}
+                    }
+                }
+            }
+        });
+        function updateMLChart(fx, credit, policy) {
+            if(window.mlChart) {
+                mlChart.data.datasets[0].data = [fx, credit, policy];
+                mlChart.update();
+            }
+        }
+        const mlChartCtx = document.getElementById('mlChart').getContext('2d');
+        window.mlChart = new Chart(mlChartCtx, {
+            type: 'bar',
+            data: {
+                labels: ['外汇', '信用', '政策'],
+                datasets: [{
+                    label: '风险权重',
+                    data: [0.82,0.21,0.67],
+                    backgroundColor: [
+                        'linear-gradient(90deg, #03A9F4 0%, #00C853 100%)',
+                        '#00C853',
+                        '#FF6D00'
+                    ],
+                    borderColor: '#01579B',
+                    borderWidth: 1.5,
+                }]
+            },
+            options: {
+                maintainAspectRatio: true,
+                responsive: true,
+                plugins: {
+                    legend: {display: false},
+                },
+                scales: {
+                    x: {
+                        grid: {color: '#CFD8DC30'},
+                        ticks: {color: '#01579B', font: {family: 'Roboto Mono'}}
+                    },
+                    y: {
+                        min: 0,
+                        max: 1,
+                        grid: {color: '#CFD8DC30'},
+                        ticks: {color: '#01579B', font: {family: 'Roboto Mono'}}
+                    }
+                }
+            }
+        });
+        document.addEventListener('alpine:init', () => {
+            Alpine.effect(() => {
+                const fx = Alpine.store('riskWeight')?.fxWeight || 0.82;
+                const credit = Alpine.store('riskWeight')?.creditWeight || 0.21;
+                const policy = Alpine.store('riskWeight')?.policyWeight || 0.67;
+                updateMLChart(fx, credit, policy);
+            });
+        });
+        function syncMLChart() {
+            try {
+                const fx = document.querySelector('#ml-panel [type=range]:nth-child(2)').value;
+                const credit = document.querySelector('#ml-panel [type=range]:nth-child(5)').value;
+                const policy = document.querySelector('#ml-panel [type=range]:nth-child(8)').value;
+                updateMLChart(Number(fx), Number(credit), Number(policy));
+            } catch(e) {}
+        }
+        document.querySelectorAll('#ml-panel [type=range]').forEach(input => {
+            input.addEventListener('input', syncMLChart);
+        });
+        function showDialog(dialogId) {
+            document.getElementById(dialogId).style.display = 'flex';
+        }
+        function closeDialog(dialogId) {
+            document.getElementById(dialogId).style.display = 'none';
+        }
+        setInterval(() => {
+            let last = fxChart.data.datasets[0].data.slice(-1)[0];
+            let next = +(last + (Math.random()-0.5)*0.015).toFixed(3);
+            if(next<7.18) next=7.18; if(next>7.23) next=7.23;
+            fxChart.data.datasets[0].data.push(next);
+            fxChart.data.labels.push(new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}));
+            if(fxChart.data.datasets[0].data.length>7) {
+                fxChart.data.datasets[0].data.shift();
+                fxChart.data.labels.shift();
+            }
+            fxChart.update();
+        }, 2000);
+        setInterval(()=>{
+            let fxAlert = document.getElementById('alert-fx');
+            let policyAlert = document.getElementById('alert-policy');
+            if(Math.random()>0.5) {
+                fxAlert.textContent='触发'; fxAlert.classList.add('text-[#FF6D00]');
+                policyAlert.textContent='警告'; policyAlert.classList.add('text-[#FF6D00]');
+            } else {
+                fxAlert.textContent='安全'; fxAlert.classList.remove('text-[#FF6D00]');
+                policyAlert.textContent='正常'; policyAlert.classList.remove('text-[#FF6D00]');
+            }
+        }, 3000);
+        function downloadReport() {
+            const blob = new Blob([
+                '区块链跨境贸易便利化平台\n结算风险评估报告\n---\nSWIFT报文解析:\n{1:F01BANKDEFFXXXX0000000000}{2:I103BANKCNBXAXXXN}{4:\n:20:20250328TRANS001\n:23B:CRED\n:32A:250328CNY1000000,00\n:50K:/1020000001234\n高坚\n:59:/2040000005678\n贾姬瑾\n:71A:OUR\n}\n---\n多维度风险分析:\n外汇波动风险指数: 0.82\n信用评级风险指数: 0.21\n政策变动影响指数: 0.67\n历史违约率（近一年）: 0.5%\n资金冻结概率预测: 0.3%'
+            ], {type: 'application/octet-stream'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'risk_report_20250328.pdf';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(()=>{document.body.removeChild(a); URL.revokeObjectURL(url);},500);
+        }
+    </script>
+ </body>
+</html>package com.blockch;
+import com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+@SpringBootApplication
+@EnableKafka
+@EnableScheduling
+@EnableTransactionManagement
+public class SettlementRiskEarlyWarningSystemApplication implements CommandLineRunner {
+    private static final Logger logger = LoggerFactory.getLogger(SettlementRiskEarlyWarningSystemApplication.class);
+    @Autowired
+    private SettlementRiskService settlementRiskService;
+    public static void main(String[] args) {
+        SpringApplication.run(SettlementRiskEarlyWarningSystemApplication.class, args);
+    }
+    @Override
+    public void run(String... args) throws Exception {
+        logger.info("结算风险预警系统启动");
+        settlementRiskService.startMonitoring();
+    }
+}
+package com.blockch;
+import com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.concurrent.TimeUnit;
+@Service
+public class SettlementRiskService {
+    private static final Logger logger = LoggerFactory.getLogger(SettlementRiskService.class);
+    @Autowired
+    private ForeignExchangeMonitor foreignExchangeMonitor;
+    @Autowired
+    private SwiftMessageParser swiftMessageParser;
+    @Autowired
+    private RiskCoefficientCalculator riskCoefficientCalculator;
+    @Autowired
+    private SmartContractExecutor smartContractExecutor;
+    public void startMonitoring() {
+        logger.info("开始启动各项监控服务");
+        foreignExchangeMonitor.startMonitor();
+    }
+    @KafkaListener(topics = "foreign_exchange_topic", groupId = "settlement_group")
+    @Transactional
+    public void handleForeignExchangeEvent(String event) {
+        try {
+            Preconditions.checkNotNull(event, "外汇波动事件不能为空");
+            logger.info("接收到外汇波动事件: {}", event);
+            double volatility = foreignExchangeMonitor.calculateVolatility(event);
+            double riskCoefficient = riskCoefficientCalculator.calculateRiskCoefficient(volatility, null, null);
+            if (riskCoefficient > 0.5) {
+                logger.warn("外汇波动风险系数较高: {}", riskCoefficient);
+                smartContractExecutor.executeContract(riskCoefficient);
+            }
+        } catch (Exception e) {
+            logger.error("处理外汇波动事件失败", e);
+            for (int i = 0; i < 3; i++) {
+                try {
+                    logger.info("重试处理外汇波动事件, 重试次数: {}", i + 1);
+                    double volatility = foreignExchangeMonitor.calculateVolatility(event);
+                    double riskCoefficient = riskCoefficientCalculator.calculateRiskCoefficient(volatility, null, null);
+                    if (riskCoefficient > 0.5) {
+                        logger.warn("外汇波动风险系数较高: {}", riskCoefficient);
+                        smartContractExecutor.executeContract(riskCoefficient);
+                    }
+                    break;
+                } catch (Exception ex) {
+                    logger.error("重试处理外汇波动事件失败, 重试次数: {}", i + 1, ex);
+                    if (i == 2) {
+                        logger.error("达到最大重试次数, 触发熔断");
+                    }
+                    try {
+                        TimeUnit.SECONDS.sleep(2);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+    }
+}
+package com.blockch;
+import com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+@Component
+public class SwiftMessageParser {
+    private static final Logger logger = LoggerFactory.getLogger(SwiftMessageParser.class);
+    private static final String MT103_REGEX = "(?:MT103).*?(?:Sender:)(.*?)(?:Receiver:)(.*?)(?:Amount:)(.*?)(?:Currency:)(.*?)"; 
+    private static final String MT202_REGEX = "(?:MT202).*?(?:Sender:)(.*?)(?:Receiver:)(.*?)(?:ValueDate:)(.*?)"; 
+    @Transactional
+    public void parseSwiftMessage(String message) {
+        Preconditions.checkNotNull(message, "SWIFT报文不能为空");
+        logger.info("开始解析SWIFT报文");
+        if (message.contains("MT103")) {
+            Pattern pattern = Pattern.compile(MT103_REGEX);
+            Matcher matcher = pattern.matcher(message);
+            if (matcher.find()) {
+                String sender = matcher.group(1);
+                String receiver = matcher.group(2);
+                String amount = matcher.group(3);
+                String currency = matcher.group(4);
+                logger.info("解析MT103报文结果: 发送方: {}, 接收方: {}, 金额: {}, 货币: {}", sender, receiver, amount, currency);
+            }
+        } else if (message.contains("MT202")) {
+            Pattern pattern = Pattern.compile(MT202_REGEX);
+            Matcher matcher = pattern.matcher(message);
+            if (matcher.find()) {
+                String sender = matcher.group(1);
+                String receiver = matcher.group(2);
+                String valueDate = matcher.group(3);
+                logger.info("解析MT202报文结果: 发送方: {}, 接收方: {}, 起息日: {}", sender, receiver, valueDate);
+            }
+        }
+    }
+}
+package com.blockch;
+import com.google.common.base.Preconditions;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import java.io.IOException;
+@Component
+public class ForeignExchangeMonitor {
+    private static final Logger logger = LoggerFactory.getLogger(ForeignExchangeMonitor.class);
+    private static final String SOURCE1_URL = "https://api.com/forex1";
+    private static final String SOURCE2_URL = "https://api.com/forex2";
+    private static final String SOURCE3_URL = "https://api.com/forex3";
+    public void startMonitor() {
+        logger.info("开始启动外汇波动监控");
+    }
+    public double calculateVolatility(String event) {
+        Preconditions.checkNotNull(event, "外汇事件不能为空");
+        double volatility = 0;
+        try {
+            volatility = fetchVolatilityFromSource(SOURCE1_URL);
+        } catch (IOException e) {
+            logger.error("从数据源1获取外汇波动率失败", e);
+        }
+        return volatility;
+    }
+    private double fetchVolatilityFromSource(String url) throws IOException {
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+        HttpGet httpGet = new HttpGet(url);
+        HttpResponse response = httpClient.execute(httpGet);
+        if (response.getStatusLine().getStatusCode() == 200) {
+            String result = EntityUtils.toString(response.getEntity());
+            return Double.parseDouble(result);
+        } else {
+            logger.error("从数据源 {} 获取数据失败，状态码: {}", url, response.getStatusLine().getStatusCode());
+            return 0;
+        }
+    }
+    @Scheduled(fixedRate = 60000)
+    public void fetchForeignExchangeData() {
+        try {
+            double volatility1 = fetchVolatilityFromSource(SOURCE1_URL);
+            double volatility2 = fetchVolatilityFromSource(SOURCE2_URL);
+            double volatility3 = fetchVolatilityFromSource(SOURCE3_URL);
+            double combinedVolatility = (volatility1 + volatility2 + volatility3) / 3;
+            logger.info("整合后的外汇波动率: {}", combinedVolatility);
+        } catch (IOException e) {
+            logger.error("定时获取外汇数据失败", e);
+        }
+    }
+}
+package com.blockch;
+import com.google.common.base.Preconditions;
+import org.deeplearning4j.nn.api.OptimizationAlgorithm;
+import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
+import org.deeplearning4j.nn.conf.layers.LSTM;
+import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
+import org.nd4j.evaluation.regression.RegressionEvaluation;
+import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.dataset.DataSet;
+import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
+import org.nd4j.linalg.factory.Nd4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import java.util.ArrayList;
+import java.util.List;
+@Component
+public class RiskCoefficientCalculator {
+    private static final Logger logger = LoggerFactory.getLogger(RiskCoefficientCalculator.class);
+    public double predictVolatilityUsingLSTM(List<Double> historicalData) {
+        Preconditions.checkNotNull(historicalData, "历史数据不能为空");
+        int numFeatures = 1;
+        int lookBack = 5;
+        INDArray input = Nd4j.create(new int[]{historicalData.size() - lookBack, lookBack, numFeatures});
+        INDArray labels = Nd4j.create(new int[]{historicalData.size() - lookBack, numFeatures});
+        for (int i = 0; i < historicalData.size() - lookBack; i++) {
+            for (int j = 0; j < lookBack; j++) {
+                input.putScalar(new int[]{i, j, 0}, historicalData.get(i + j));
+            }
+            labels.putScalar(new int[]{i, 0}, historicalData.get(i + lookBack));
+        }
+        DataSet dataSet = new DataSet(input, labels);
+                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT)
+                .iterations(100)
+                .learningRate(0.01)
+                .list()
+                .layer(0, new LSTM.Builder().nIn(lookBack).nOut(50).build())
+                .layer(1, new LSTM.Builder().nIn(50).nOut(50).build())
+                .layer(2, new LSTM.Builder().nIn(50).nOut(1).build())
+                .build();
+        model.init();
+        model.setListeners(new ScoreIterationListener(10));
+        for (int i = 0; i < 100; i++) {
+            model.fit(dataSet);
+        }
+        INDArray testInput = input.getRows(historicalData.size() - lookBack - 1, historicalData.size() - lookBack - 1);
+        INDArray prediction = model.output(testInput);
+        return prediction.getDouble(0, 0);
+    }
+    public double adjustCreditRatingBasedOnBayes(double currentRating, double newEvidence) {
+        Preconditions.checkArgument(currentRating >= 0 && currentRating <= 1, "当前信用评级必须在0到1之间");
+        Preconditions.checkArgument(newEvidence >= 0 && newEvidence <= 1, "新证据必须在0到1之间");
+        double prior = currentRating;
+        double likelihood = newEvidence;
+        double posterior = (likelihood * prior) / ((likelihood * prior) + ((1 - likelihood) * (1 - prior)));
+        return posterior;
+    }
+    public double calculateRiskCoefficient(double exchangeRateRisk, Double creditRisk, Double policyRisk) {
+        Preconditions.checkNotNull(exchangeRateRisk, "汇率风险不能为空");
+        Preconditions.checkNotNull(creditRisk, "信用风险不能为空");
+        Preconditions.checkNotNull(policyRisk, "政策风险不能为空");
+        double weightExchangeRate = 0.4;
+        double weightCredit = 0.3;
+        double weightPolicy = 0.3;
+        return (weightExchangeRate * exchangeRateRisk) + (weightCredit * creditRisk) + (weightPolicy * policyRisk);
+    }
+}
+package com.blockch;
+import com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import org.web3j.crypto.Credentials;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.http.HttpService;
+import org.web3j.tuples.generated.Tuple2;
+import org.web3j.tx.Contract;
+import org.web3j.tx.TransactionManager;
+import org.web3j.tx.gas.StaticGasProvider;
+import java.math.BigInteger;
+@Component
+public class SmartContractExecutor {
+    private static final Logger logger = LoggerFactory.getLogger(SmartContractExecutor.class);
+    private static final String CONTRACT_ADDRESS = "0x1234567890abcdef...";
+    private static final String CONTRACT_ABI = "[{...}]";
+    private static final String RPC_URL = "https://mainnet.infura.io/v3/...";
+    private static final BigInteger GAS_PRICE = BigInteger.valueOf(20000000000L);
+    private static final BigInteger GAS_LIMIT = BigInteger.valueOf(4700000);
+    public void executeContract(double riskCoefficient) {
+        Preconditions.checkArgument(riskCoefficient >= 0, "风险系数必须为非负数");
+        Web3j web3j = Web3j.build(new HttpService(RPC_URL));
+        Credentials credentials = Credentials.create("private_key");
+        TransactionManager transactionManager = new org.web3j.tx.TransactionManager(web3j, credentials) {
+            @Override
+            public BigInteger getGasPrice() {
+                return GAS_PRICE;
+            }
+            @Override
+            public BigInteger getGasLimit() {
+                return GAS_LIMIT;
+            }
+        };
+        StaticGasProvider gasProvider = new StaticGasProvider(GAS_PRICE, GAS_LIMIT);
+        try {
+            YourSmartContract contract = YourSmartContract.load(CONTRACT_ADDRESS, web3j, transactionManager, gasProvider);
+            Tuple2<BigInteger, Boolean> result = contract.executeRiskAction(BigInteger.valueOf((long) (riskCoefficient * 100))).send();
+            logger.info("智能合约执行结果: {}", result);
+        } catch (Exception e) {
+            logger.error("执行智能合约失败", e);
+        }
+    }
+    public static class YourSmartContract extends Contract {
+        protected YourSmartContract(String contractAddress, Web3j web3j, TransactionManager transactionManager, StaticGasProvider gasProvider) {
+            super(contractAddress, web3j, transactionManager, gasProvider);
+        }
+        public static YourSmartContract load(String contractAddress, Web3j web3j, TransactionManager transactionManager, StaticGasProvider gasProvider) {
+            YourSmartContract contract = new YourSmartContract(contractAddress, web3j, transactionManager, gasProvider);
+            contract.setFallbackFunction(contract.fallbackFunction());
+            return contract;
+        }
+        public Tuple2<BigInteger, Boolean> executeRiskAction(BigInteger riskValue) throws Exception {
+            return executeCallSingleValueReturn(Tuple2.class, "executeRiskAction", riskValue);
+        }
+    }
+}
+2. 链上效能分析模块关键代码
+package com.blockch.analysis.controller;
+import com.blockch.analysis.model.dto.NodeStatusDTO;
+import com.blockch.analysis.model.vo.NodeStatusVO;
+import com.blockch.analysis.service.BlockchainNodeMonitorService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import javax.validation.Valid;
+import java.util.List;
+/**
+ * 区块链节点监控控制器
+ */
+@RestController
+@RequestMapping("/blockchain/node")
+public class BlockchainNodeController {
+    @Autowired
+    private BlockchainNodeMonitorService blockchainNodeMonitorService;
+    /**
+     * 获取节点状态列表
+     * @return 节点状态VO列表
+     */
+    @GetMapping("/status")
+    public List<NodeStatusVO> getNodeStatusList() {
+        List<NodeStatusDTO> dtoList = blockchainNodeMonitorService.getNodeStatusList();
+        return dtoList.stream().map(this::convertToVO).collect(Collectors.toList());
+    }
+    private NodeStatusVO convertToVO(NodeStatusDTO dto) {
+        NodeStatusVO vo = new NodeStatusVO();
+        vo.setNodeId(dto.getNodeId());
+        vo.setIsOnline(dto.getIsOnline());
+        vo.setResponseTime(dto.getResponseTime());
+        vo.setHealthScore(dto.getHealthScore());
+        return vo;
+    }
+}
+package com.blockch.analysis.service;
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.blockch.analysis.model.dto.NodeStatusDTO;
+import com.blockch.analysis.model.entity.BlockchainNode;
+import java.util.List;
+/**
+ * 区块链节点监控服务接口
+ */
+public interface BlockchainNodeMonitorService extends IService<BlockchainNode> {
+    /**
+     * 获取节点状态列表
+     * @return 节点状态DTO列表
+     */
+    List<NodeStatusDTO> getNodeStatusList();
+}
+package com.blockch.analysis.service.impl;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.blockch.analysis.dao.BlockchainNodeMapper;
+import com.blockch.analysis.model.dto.NodeStatusDTO;
+import com.blockch.analysis.model.entity.BlockchainNode;
+import com.blockch.analysis.service.BlockchainNodeMonitorService;
+import com.blockch.analysis.service.calculator.NodeHealthCalculator;
+import com.blockch.analysis.service.validator.BlockchainAddressValidator;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.collect.Lists;
+import com.hutool.http.HttpRequest;
+import com.hutool.http.HttpResponse;
+import com.hutool.http.HttpUtil;
+import com.hutool.json.JSONObject;
+import com.hutool.json.JSONUtil;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.StatusRuntimeException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import javax.validation.constraints.NotBlank;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+/**
+ * 区块链节点监控服务实现
+ */
+@Service
+@Slf4j
+public class BlockchainNodeMonitorServiceImpl extends ServiceImpl<BlockchainNodeMapper, BlockchainNode> implements BlockchainNodeMonitorService {
+    @Autowired
+    private MeterRegistry meterRegistry;
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+    @Autowired
+    private RedissonClient redissonClient;
+    private static final LoadingCache<String, Long> lastProbeTimeCache = CacheBuilder.newBuilder()
+          .expireAfterWrite(5, TimeUnit.MINUTES)
+          .build(new CacheLoader<String, Long>() {
+                @Override
+                public Long load(String key) throws Exception {
+                    return System.currentTimeMillis();
+                }
+            });
+    private static final Counter nodeProbeFailureCounter = Counter.builder("blockchain_node_probe_failure")
+          .description("Number of blockchain node probe failures")
+          .register(meterRegistry);
+    /**
+     * 获取节点状态列表
+     * @return 节点状态DTO列表
+     */
+    @Override
+    public List<NodeStatusDTO> getNodeStatusList() {
+        List<BlockchainNode> nodeList = list();
+        return nodeList.stream().map(this::convertToDTO).collect(Collectors.toList());
+    }
+    private NodeStatusDTO convertToDTO(BlockchainNode node) {
+        NodeStatusDTO dto = new NodeStatusDTO();
+        dto.setNodeId(node.getNodeId());
+        dto.setNodeAddress(node.getNodeAddress());
+        dto.setIsOnline(node.getIsOnline());
+        dto.setResponseTime(node.getResponseTime());
+        dto.setHealthScore(node.getHealthScore());
+        return dto;
+    }
+    /**
+     * 定时探测节点状态
+     */
+    @Scheduled(fixedRate = 5000)
+    @Transactional
+    public void probeNodeStatus() {
+        List<BlockchainNode> nodeList = list();
+        for (BlockchainNode node : nodeList) {
+            String nodeAddress = node.getNodeAddress();
+            if (!BlockchainAddressValidator.validate(nodeAddress)) {
+                log.error("Invalid blockchain address: {}", nodeAddress);
+                continue;
+            }
+            RLock lock = redissonClient.getLock("node_probe_lock:" + nodeAddress);
+            try {
+                if (lock.tryLock(100, 5, TimeUnit.SECONDS)) {
+                    boolean isOnline = false;
+                    long responseTime = -1;
+                    int retryCount = 3;
+                    while (retryCount > 0) {
+                        try {
+                            long startTime = System.currentTimeMillis();
+                            isOnline = probeNodeByHttp(nodeAddress) || probeNodeByGrpc(nodeAddress);
+                            responseTime = System.currentTimeMillis() - startTime;
+                            break;
+                        } catch (Exception e) {
+                            retryCount--;
+                            nodeProbeFailureCounter.increment();
+                            log.error("Node probe failed, retry left: {}", retryCount, e);
+                        }
+                    }
+                    if (isOnline) {
+                        node.setIsOnline(true);
+                        node.setResponseTime(responseTime);
+                        double healthScore = NodeHealthCalculator.calculateHealthScore(responseTime, 1);
+                        node.setHealthScore(healthScore);
+                    } else {
+                        node.setIsOnline(false);
+                        node.setResponseTime(-1);
+                        node.setHealthScore(0);
+                    }
+                    updateById(node);
+                    NodeStatusDTO dto = convertToDTO(node);
+                    rabbitTemplate.convertAndSend("node_status_exchange", "node.status.change", dto);
+                } else {
+                    log.warn("Failed to acquire lock for node: {}", nodeAddress);
+                }
+            } catch (InterruptedException e) {
+                log.error("Interrupted while probing node: {}", nodeAddress, e);
+            } finally {
+                if (lock.isHeldByCurrentThread()) {
+                    lock.unlock();
+                }
+            }
+        }
+    }
+    private boolean probeNodeByHttp(@NotBlank String nodeAddress) {
+        try {
+            HttpResponse response = HttpUtil.createGet(nodeAddress + "/health")
+                  .setTimeout(2000)
+                  .execute();
+            return response.isOk();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    private boolean probeNodeByGrpc(@NotBlank String nodeAddress) {
+        String[] parts = nodeAddress.split("://");
+        if (parts.length != 2 || !"grpc".equals(parts[0])) {
+            return false;
+        }
+        String[] hostPort = parts[1].split(":");
+        if (hostPort.length != 2) {
+            return false;
+        }
+        String host = hostPort[0];
+        int port = Integer.parseInt(hostPort[1]);
+        ManagedChannel channel = ManagedChannelBuilder.forAddress(host, port)
+              .usePlaintext()
+              .build();
+        try {
+            HealthServiceGrpc.HealthServiceBlockingStub stub = HealthServiceGrpc.newBlockingStub(channel);
+            HealthCheckRequest request = HealthCheckRequest.newBuilder().build();
+            HealthCheckResponse response = stub.check(request);
+            return HealthCheckResponse.ServingStatus.SERVING.equals(response.getStatus());
+        } catch (StatusRuntimeException e) {
+            return false;
+        } finally {
+            channel.shutdownNow();
+        }
+    }
+}
+package com.blockch.analysis.service.calculator;
+/**
+ * 节点健康评分计算器
+ */
+public class NodeHealthCalculator {
+    /**
+     * 计算节点健康评分
+     * @param responseTime 响应时间
+     * @param successRate 成功率
+     * @return 健康评分
+     */
+    public static double calculateHealthScore(double responseTime, double successRate) {
+        double responseTimeScore = 100 - responseTime / 100 * 40;
+        double successRateScore = successRate * 60;
+        return responseTimeScore + successRateScore;
+    }
+}
+package com.blockch.analysis.service.validator;
+import java.util.regex.Pattern;
+/**
+ * 区块链地址验证器
+ */
+public class BlockchainAddressValidator {
+    private static final Pattern ADDRESS_PATTERN = Pattern.compile("^0x[0-9a-fA-F]{40}$");
+    /**
+     * 验证区块链地址格式
+     * @param address 区块链地址
+     * @return 是否有效
+     */
+    public static boolean validate(String address) {
+        return !StringUtils.isEmpty(address) && ADDRESS_PATTERN.matcher(address).matches();
+    }
+}
+package com.blockch.analysis.dao;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.blockch.analysis.model.entity.BlockchainNode;
+import org.apache.ibatis.annotations.Mapper;
+/**
+ */
+@Mapper
+public interface BlockchainNodeMapper extends BaseMapper<BlockchainNode> {
+}
+package com.blockch.analysis.model.dto;
+import java.math.BigDecimal;
+/**
+ * 节点状态数据传输对象
+ */
+public class NodeStatusDTO {
+    private String nodeId;
+    private String nodeAddress;
+    private boolean isOnline;
+    private long responseTime;
+    private double healthScore;
+    public String getNodeId() {
+        return nodeId;
+    }
+    public void setNodeId(String nodeId) {
+        this.nodeId = nodeId;
+    }
+    public String getNodeAddress() {
+        return nodeAddress;
+    }
+    public void setNodeAddress(String nodeAddress) {
+        this.nodeAddress = nodeAddress;
+    }
+    public boolean getIsOnline() {
+        return isOnline;
+    }
+    public void setIsOnline(boolean isOnline) {
+        this.isOnline = isOnline;
+    }
+    public long getResponseTime() {
+        return responseTime;
+    }
+    public void setResponseTime(long responseTime) {
+        this.responseTime = responseTime;
+    }
+    public double getHealthScore() {
+        return healthScore;
+    }
+    public void setHealthScore(double healthScore) {
+        this.healthScore = healthScore;
+    }
+}
+package com.blockch.analysis.model.vo;
+import java.math.BigDecimal;
+/**
+ * 节点状态视图对象
+ */
+public class NodeStatusVO {
+    private String nodeId;
+    private boolean isOnline;
+    private long responseTime;
+    private double healthScore;
+    public String getNodeId() {
+        return nodeId;
+    }
+    public void setNodeId(String nodeId) {
+        this.nodeId = nodeId;
+    }
+    public boolean getIsOnline() {
+        return isOnline;
+    }
+    public void setIsOnline(boolean isOnline) {
+        this.isOnline = isOnline;
+    }
+    public long getResponseTime() {
+        return responseTime;
+    }
+    public void setResponseTime(long responseTime) {
+        this.responseTime = responseTime;
+    }
+    public double getHealthScore() {
+        return healthScore;
+    }
+    public void setHealthScore(double healthScore) {
+        this.healthScore = healthScore;
+    }
+}
+package com.blockch.analysis.model.entity;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+import java.math.BigDecimal;
+/**
+ * 区块链节点实体
+ */
+@Data
+@TableName("blockchain_node")
+public class BlockchainNode {
+    private String nodeId;
+    private String nodeAddress;
+    private boolean isOnline;
+    private long responseTime;
+    private double healthScore;
+}
+package com.blockch.analysis.config;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.prometheus.PrometheusMeterRegistry;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+/**
+ * Prometheus配置
+ */
+@Configuration
+public class PrometheusConfig {
+    @Bean
+    public MeterRegistry meterRegistry() {
+        return new PrometheusMeterRegistry();
+    }
+}
+package com.blockch.analysis.service;
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.blockch.analysis.model.dto.ContractPerformanceDTO;
+import com.blockch.analysis.model.entity.ContractExecution;
+import java.util.List;
+/**
+ * 智能合约性能分析服务接口
+ */
+public interface ContractPerformanceAnalysisService extends IService<ContractExecution> {
+    /**
+     * 获取智能合约执行性能列表
+     * @return 智能合约执行性能DTO列表
+     */
+    List<ContractPerformanceDTO> getContractPerformanceList();
+}
+package com.blockch.analysis.service.impl;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.blockch.analysis.dao.ContractExecutionMapper;
+import com.blockch.analysis.model.dto.ContractPerformanceDTO;
+import com.blockch.analysis.model.entity.ContractExecution;
+import com.blockch.analysis.service.ContractPerformanceAnalysisService;
+import com.blockch.analysis.service.calculator.ContractPerformanceCalculator;
+import com.blockch.analysis.service.validator.BlockchainAddressValidator;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import javax.validation.constraints.NotBlank;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+/**
+ * 智能合约性能分析服务实现
+ */
+@Service
+@Slf4j
+public class ContractPerformanceAnalysisServiceImpl extends ServiceImpl<ContractExecutionMapper, ContractExecution> implements ContractPerformanceAnalysisService {
+    @Autowired
+    private MeterRegistry meterRegistry;
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+    @Autowired
+    private RedissonClient redissonClient;
+    private static final Counter contractExecutionFailureCounter = Counter.builder("contract_execution_failure")
+          .description("Number of contract execution failures")
+          .register(meterRegistry);
+    /**
+     * 获取智能合约执行性能列表
+     * @return 智能合约执行性能DTO列表
+     */
+    @Override
+    @Cacheable("contractPerformanceList")
+    public List<ContractPerformanceDTO> getContractPerformanceList() {
+        List<ContractExecution> executionList = list();
+        return executionList.stream().map(this::convertToDTO).collect(Collectors.toList());
+    }
+    private ContractPerformanceDTO convertToDTO(ContractExecution execution) {
+        ContractPerformanceDTO dto = new ContractPerformanceDTO();
+        dto.setContractAddress(execution.getContractAddress());
+        dto.setTxHash(execution.getTxHash());
+        dto.setIsSuccess(execution.getIsSuccess());
+        dto.setExecutionTime(execution.getExecutionTime());
+        dto.setGasConsumption(execution.getGasConsumption());
+        return dto;
+    }
+    /**
+     * 定时分析智能合约执行情况
+     */
+    @Scheduled(fixedRate = 10000)
+    @Transactional
+    public void analyzeContractPerformance() {
+        List<ContractExecution> executionList = list();
+        for (ContractExecution execution : executionList) {
+            String contractAddress = execution.getContractAddress();
+            if (!BlockchainAddressValidator.validate(contractAddress)) {
+                log.error("Invalid blockchain address: {}", contractAddress);
+                continue;
+            }
+            RLock lock = redissonClient.getLock("contract_analysis_lock:" + contractAddress);
+            try {
+                if (lock.tryLock(100, 5, TimeUnit.SECONDS)) {
+                    boolean isSuccess = false;
+                    long executionTime = -1;
+                    long gasConsumption = -1;
+                    int retryCount = 3;
+                    while (retryCount > 0) {
+                        try {
+                            ContractExecutionResult result = getContractExecutionResult(contractAddress, execution.getTxHash());
+                            isSuccess = result.isSuccess();
+                            executionTime = result.getExecutionTime();
+                            gasConsumption = result.getGasConsumption();
+                            break;
+                        } catch (Exception e) {
+                            retryCount--;
+                            contractExecutionFailureCounter.increment();
+                            log.error("Contract execution analysis failed, retry left: {}", retryCount, e);
+                        }
+                    }
+                    execution.setIsSuccess(isSuccess);
+                    execution.setExecutionTime(executionTime);
+                    execution.setGasConsumption(gasConsumption);
+                    updateById(execution);
+                    ContractPerformanceDTO dto = convertToDTO(execution);
+                    rabbitTemplate.convertAndSend("contract_performance_exchange", "contract.performance.change", dto);
+                } else {
+                    log.warn("Failed to acquire lock for contract: {}", contractAddress);
+                }
+            } catch (InterruptedException e) {
+                log.error("Interrupted while analyzing contract: {}", contractAddress, e);
+            } finally {
+                if (lock.isHeldByCurrentThread()) {
+                    lock.unlock();
+                }
+            }
+        }
+    }
+    private ContractExecutionResult getContractExecutionResult(@NotBlank String contractAddress, @NotBlank String txHash) {
+        ContractExecutionResult result = new ContractExecutionResult();
+        result.setSuccess(true);
+        result.setExecutionTime(50);
+        result.setGasConsumption(21000);
+        return result;
+    }
+}
+class ContractExecutionResult {
+    private boolean success;
+    private long executionTime;
+    private long gasConsumption;
+    public boolean isSuccess() {
+        return success;
+    }
+    public void setSuccess(boolean success) {
+        this.success = success;
+    }
+    public long getExecutionTime() {
+        return executionTime;
+    }
+    public void setExecutionTime(long executionTime) {
+        this.executionTime = executionTime;
+    }
+    public long getGasConsumption() {
+        return gasConsumption;
+    }
+    public void setGasConsumption(long gasConsumption) {
+        this.gasConsumption = gasConsumption;
+    }
+}
+package com.blockch.analysis.service.calculator;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+/**
+ * 智能合约性能计算器
+ */
+public class ContractPerformanceCalculator {
+    /**
+     * 计算交易成功率
+     * @param executionList 执行列表
+     * @return 交易成功率
+     */
+    public static double calculateTxSuccessRate(List<ContractExecution> executionList) {
+        if (executionList.isEmpty()) {
+            return 0;
+        }
+        int successCount = 0;
+        for (ContractExecution execution : executionList) {
+            if (execution.getIsSuccess()) {
+                successCount++;
+            }
+        }
+        return new BigDecimal(successCount).divide(new BigDecimal(executionList.size()), 2, BigDecimal.ROUND_HALF_UP).doubleValue();
+    }
+    /**
+     * 计算执行耗时分布
+     * @param executionList 执行列表
+     * @return 执行耗时分布数组 [0-100ms, 100-500ms, 500ms+]
+     */
+    public static int[] calculateExecutionTimeDistribution(List<ContractExecution> executionList) {
+        int[] distribution = new int[3];
+        for (ContractExecution execution : executionList) {
+            if (execution.getExecutionTime() <= 100) {
+                distribution[0]++;
+            } else if (execution.getExecutionTime() <= 500) {
+                distribution[1]++;
+            } else {
+                distribution[2]++;
+            }
+        }
+        return distribution;
+    }
+    /**
+     * 检测Gas消耗异常
+     * @param executionList 执行列表
+     * @return Gas消耗异常列表
+     */
+    public static List<ContractExecution> detectGasConsumptionAnomaly(List<ContractExecution> executionList) {
+        if (executionList.isEmpty()) {
+            return Collections.emptyList();
+        }
+        double mean = getMean(executionList, ContractExecution::getGasConsumption);
+        double stdDev = getStandardDeviation(executionList, ContractExecution::getGasConsumption, mean);
+        List<ContractExecution> anomalyList = new ArrayList<>();
+        for (ContractExecution execution : executionList) {
+            double zScore = (execution.getGasConsumption() - mean) / stdDev;
+            if (Math.abs(zScore) > 3) {
+                anomalyList.add(execution);
+            }
+        }
+        return anomalyList;
+    }
+    private static double getMean(List<ContractExecution> executionList, Function<ContractExecution, Long> getter) {
+        long sum = 0;
+        for (ContractExecution execution : executionList) {
+            sum += getter.apply(execution);
+        }
+        return new BigDecimal(sum).divide(new BigDecimal(executionList.size()), 2, BigDecimal.ROUND_HALF_UP).doubleValue();
+    }
+    private static double getStandardDeviation(List<ContractExecution> executionList, Function<ContractExecution, Long> getter, double mean) {
+        double sumSquaredDiff = 0;
+        for (ContractExecution execution : executionList) {
+            double diff = getter.apply(execution) - mean;
+            sumSquaredDiff += diff * diff;
+        }
+        double variance = sumSquaredDiff / executionList.size();
+        return Math.sqrt(variance);
+    }
+}
+package com.blockch.analysis.dao;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.blockch.analysis.model.entity.ContractExecution;
+import org.apache.ibatis.annotations.Mapper;
+/**
+ */
+@Mapper
+public interface ContractExecutionMapper extends BaseMapper<ContractExecution> {
+}
+package com.blockch.analysis.model.dto;
+import java.math.BigDecimal;
+/**
+ * 智能合约性能数据传输对象
+ */
+public class ContractPerformanceDTO {
+    private String contractAddress;
+    private String txHash;
+    private boolean isSuccess;
+    private long executionTime;
+    private long gasConsumption;
+    public String getContractAddress() {
+        return contractAddress;
+    }
+    public void setContractAddress(String contractAddress) {
+        this.contractAddress = contractAddress;
+    }
+    public String getTxHash() {
+        return txHash;
+    }
+    public void setTxHash(String txHash) {
+        this.txHash = txHash;
+    }
+    public boolean getIsSuccess() {
+        return isSuccess;
+    }
+    public void setIsSuccess(boolean isSuccess) {
+        this.isSuccess = isSuccess;
+    }
+    public long getExecutionTime() {
+        return executionTime;
+    }
+    public void setExecutionTime(long executionTime) {
+        this.executionTime = executionTime;
+    }
+    public long getGasConsumption() {
+        return gasConsumption;
+    }
+    public void setGasConsumption(long gasConsumption) {
+        this.gasConsumption = gasConsumption;
+    }
+}
+package com.blockch.analysis.model.entity;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+/**
+ * 智能合约执行实体
+ */
+@Data
+@TableName("contract_execution")
+public class ContractExecution {
+    private String contractAddress;
+    private String txHash;
+    private boolean isSuccess;
+    private long executionTime;
+    private long gasConsumption;
+}
+3. 贸易数据分析管理模块关键代码
+package com.blockch.analysis.controller;
+import com.blockch.analysis.service.TradeAnalysisService;
+import io.micrometer.core.annotation.Timed;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.concurrent.TimeUnit;
+@RestController
+@RequestMapping("/analysis")
+@Slf4j
+public class TradeAnalysisController {
+    @Autowired
+    private TradeAnalysisService tradeAnalysisService;
+    @Autowired
+    private RedissonClient redissonClient;
+    @GetMapping("/trend")
+    @Timed(value = "analysis.trend.time", description = "交易趋势分析接口耗时")
+    public Object getTradeTrend() {
+        RLock lock = redissonClient.getLock("analysis:trend:lock");
+        try {
+            boolean isLock = lock.tryLock(10, TimeUnit.SECONDS);
+            if (isLock) {
+                return tradeAnalysisService.getTradeTrend();
+            } else {
+                log.warn("获取交易趋势分析锁失败");
+                return "获取锁失败，请稍后重试";
+            }
+        } catch (InterruptedException e) {
+            log.error("交易趋势分析获取锁时发生异常", e);
+            return "获取锁时发生异常，请稍后重试";
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+    @GetMapping("/clearance")
+    @Timed(value = "analysis.clearance.time", description = "通关时效预测接口耗时")
+    public Object getClearancePrediction() {
+        RLock lock = redissonClient.getLock("analysis:clearance:lock");
+        try {
+            boolean isLock = lock.tryLock(10, TimeUnit.SECONDS);
+            if (isLock) {
+                return tradeAnalysisService.getClearancePrediction();
+            } else {
+                log.warn("获取通关时效预测锁失败");
+                return "获取锁失败，请稍后重试";
+            }
+        } catch (InterruptedException e) {
+            log.error("通关时效预测获取锁时发生异常", e);
+            return "获取锁时发生异常，请稍后重试";
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+}
+package com.blockch.analysis.service;
+import com.blockch.analysis.dao.TradeDataDao;
+import com.blockch.analysis.model.TradeData;
+import com.blockch.analysis.util.DataFingerprintUtil;
+import com.blockch.analysis.util.MerkleTreeUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.Lists;
+import io.hypersistence.utils.hibernate.type.basic.PostgreSQLEnumType;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.hyperledger.fabric.gateway.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StopWatch;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
+import org.thymeleaf.spring6.SpringTemplateEngine;
+import org.thymeleaf.templatemode.TemplateMode;
+import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
+import org.thymeleaf.templateresolver.ITemplateResolver;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.NoSuchAlgorithmException;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+@Service
+@Slf4j
+public class TradeAnalysisService {
+    @Autowired
+    private TradeDataDao tradeDataDao;
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+    @Autowired
+    private MeterRegistry meterRegistry;
+    @Value("${fabric.network.config.path}")
+    private String fabricConfigPath;
+    @Value("${fabric.network.peer.name}")
+    private String peerName;
+    @Value("${fabric.network.channel.name}")
+    private String channelName;
+    @Value("${fabric.network.chaincode.name}")
+    private String chaincodeName;
+    public Object getTradeTrend() {
+        Counter counter = meterRegistry.counter("analysis.trend.request.count");
+        counter.increment();
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        Object result = null;
+        try {
+            result = redisTemplate.opsForValue().get("analysis:trend");
+            if (result == null) {
+                List<TradeData> tradeDataList = tradeDataDao.getAllTradeData();
+                Map<String, Object> trendResult = new HashMap<>();
+                Map<Integer, List<TradeData>> monthDataMap = tradeDataList.stream().collect(Collectors.groupingBy(data -> data.getTradeTime().getMonth()));
+                List<Map<String, Object>> trendList = new ArrayList<>();
+                for (int i = 1; i <= 12; i++) {
+                    Map<String, Object> monthTrend = new HashMap<>();
+                    List<TradeData> currentMonthData = monthDataMap.get(i);
+                    List<TradeData> lastYearMonthData = monthDataMap.get(i - 12);
+                    double currentMonthVolume = currentMonthData != null ? currentMonthData.stream().mapToDouble(TradeData::getTradeVolume).sum() : 0;
+                    double lastYearMonthVolume = lastYearMonthData != null ? lastYearMonthData.stream().mapToDouble(TradeData::getTradeVolume).sum() : 0;
+                    double yoy = lastYearMonthVolume == 0 ? 0 : (currentMonthVolume - lastYearMonthVolume) / lastYearMonthVolume * 100;
+                    double mom = (i > 1 && monthDataMap.get(i - 1) != null) ? (currentMonthVolume - monthDataMap.get(i - 1).stream().mapToDouble(TradeData::getTradeVolume).sum()) / monthDataMap.get(i - 1).stream().mapToDouble(TradeData::getTradeVolume).sum() * 100 : 0;
+                    monthTrend.put("month", i);
+                    monthTrend.put("yoy", yoy);
+                    monthTrend.put("mom", mom);
+                    trendList.add(monthTrend);
+                }
+                trendResult.put("trend", trendList);
+                result = trendResult;
+                redisTemplate.opsForValue().set("analysis:trend", result, 1, TimeUnit.HOURS);
+            }
+        } catch (Exception e) {
+            log.error("交易趋势分析发生异常", e);
+            throw new RuntimeException("交易趋势分析发生异常");
+        } finally {
+            stopWatch.stop();
+            meterRegistry.timer("analysis.trend.request.time").record(stopWatch.getTotalTimeNanos(), TimeUnit.NANOSECONDS);
+        }
+        return result;
+    }
+    public Object getClearancePrediction() {
+        Counter counter = meterRegistry.counter("analysis.clearance.request.count");
+        counter.increment();
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        Object result = null;
+        try {
+            result = redisTemplate.opsForValue().get("analysis:clearance");
+            if (result == null) {
+                List<TradeData> tradeDataList = tradeDataDao.getTradeDataForClearancePrediction();
+                double[] clearanceTimes = tradeDataList.stream().mapToDouble(TradeData::getClearanceTime).toArray();
+                DescriptiveStatistics stats = new DescriptiveStatistics(clearanceTimes);
+                double movingAverage = 0;
+                if (clearanceTimes.length >= 3) {
+                    double sum = 0;
+                    for (int i = clearanceTimes.length - 3; i < clearanceTimes.length; i++) {
+                        sum += clearanceTimes[i];
+                    }
+                    movingAverage = sum / 3;
+                }
+                result = movingAverage;
+                redisTemplate.opsForValue().set("analysis:clearance", result, 1, TimeUnit.HOURS);
+            }
+        } catch (Exception e) {
+            log.error("通关时效预测发生异常", e);
+            throw new RuntimeException("通关时效预测发生异常");
+        } finally {
+            stopWatch.stop();
+            meterRegistry.timer("analysis.clearance.request.time").record(stopWatch.getTotalTimeNanos(), TimeUnit.NANOSECONDS);
+        }
+        return result;
+    }
+    @Transactional
+    public List<Map<String, Object>> getEnterpriseRanking() {
+        Counter counter = meterRegistry.counter("analysis.enterpriseRanking.request.count");
+        counter.increment();
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        List<Map<String, Object>> result = null;
+        try {
+            result = (List<Map<String, Object>>) redisTemplate.opsForValue().get("analysis:enterpriseRanking");
+            if (result == null) {
+                List<TradeData> tradeDataList = tradeDataDao.getTradeDataForEnterpriseRanking();
+                Map<String, Map<String, Double>> enterpriseDataMap = new HashMap<>();
+                for (TradeData data : tradeDataList) {
+                    String enterpriseId = data.getEnterpriseId();
+                    if (!enterpriseDataMap.containsKey(enterpriseId)) {
+                        enterpriseDataMap.put(enterpriseId, new HashMap<>());
+                    }
+                    Map<String, Double> enterpriseData = enterpriseDataMap.get(enterpriseId);
+                    enterpriseData.put("volume", enterpriseData.getOrDefault("volume", 0.0) + data.getTradeVolume());
+                    enterpriseData.put("clearanceTime", enterpriseData.getOrDefault("clearanceTime", 0.0) + data.getClearanceTime());
+                    enterpriseData.put("complianceRate", enterpriseData.getOrDefault("complianceRate", 0.0) + data.getComplianceRate());
+                    enterpriseData.put("count", enterpriseData.getOrDefault("count", 0.0) + 1);
+                }
+                List<Map<String, Object>> rankingList = new ArrayList<>();
+                for (Map.Entry<String, Map<String, Double>> entry : enterpriseDataMap.entrySet()) {
+                    Map<String, Double> data = entry.getValue();
+                    double weightedScore = data.get("volume") * 0.4 / data.get("count")
+                            + data.get("clearanceTime") * 0.3 / data.get("count")
+                            + data.get("complianceRate") * 0.3 / data.get("count");
+                    Map<String, Object> rankingItem = new HashMap<>();
+                    rankingItem.put("enterpriseId", entry.getKey());
+                    rankingItem.put("weightedScore", weightedScore);
+                    rankingList.add(rankingItem);
+                }
+                rankingList.sort((o1, o2) -> Double.compare((Double) o2.get("weightedScore"), (Double) o1.get("weightedScore")));
+                result = rankingList;
+                redisTemplate.opsForValue().set("analysis:enterpriseRanking", result, 1, TimeUnit.HOURS);
+            }
+        } catch (Exception e) {
+            log.error("企业排名计算发生异常", e);
+            throw new RuntimeException("企业排名计算发生异常");
+        } finally {
+            stopWatch.stop();
+            meterRegistry.timer("analysis.enterpriseRanking.request.time").record(stopWatch.getTotalTimeNanos(), TimeUnit.NANOSECONDS);
+        }
+        return result;
+    }
+    public String generateDataFingerprint(List<TradeData> tradeDataList) {
+        try {
+            return DataFingerprintUtil.generateFingerprint(tradeDataList);
+        } catch (NoSuchAlgorithmException e) {
+            log.error("生成数据指纹发生异常", e);
+            throw new RuntimeException("生成数据指纹发生异常");
+        }
+    }
+    public void notarizeData(String fingerprint) {
+        try (Gateway gateway = Gateway.create(Paths.get(fabricConfigPath))) {
+            Network network = gateway.getNetwork(channelName);
+            Contract contract = network.getContract(chaincodeName);
+            byte[] result = contract.submitTransaction("notarize", fingerprint);
+            boolean isValid = MerkleTreeUtil.verifyMerkleTree(result);
+            if (!isValid) {
+                log.error("Merkle树验证失败");
+                throw new RuntimeException("Merkle树验证失败");
+            }
+        } catch (IOException | ContractException e) {
+            log.error("区块链存证发生异常", e);
+            throw new RuntimeException("区块链存证发生异常");
+        }
+    }
+    public void generateEnterpriseRankingReport(String format) {
+        List<Map<String, Object>> rankingList = getEnterpriseRanking();
+        if ("excel".equalsIgnoreCase(format)) {
+            generateExcelReport(rankingList);
+        } else if ("pdf".equalsIgnoreCase(format)) {
+            generatePDFReport(rankingList);
+        } else {
+            log.error("不支持的报告格式");
+            throw new RuntimeException("不支持的报告格式");
+        }
+    }
+    private void generateExcelReport(List<Map<String, Object>> rankingList) {
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("企业排名");
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        CellStyle headerCellStyle = workbook.createCellStyle();
+        headerCellStyle.setFont(headerFont);
+        Row headerRow = sheet.createRow(0);
+        headerRow.createCell(0).setCellValue("企业ID");
+        headerRow.createCell(1).setCellValue("加权分数");
+        for (int i = 0; i < rankingList.size(); i++) {
+            Map<String, Object> item = rankingList.get(i);
+            Row row = sheet.createRow(i + 1);
+            row.createCell(0).setCellValue((String) item.get("enterpriseId"));
+            row.createCell(1).setCellValue((Double) item.get("weightedScore"));
+        }
+        for (int i = 0; i < 2; i++) {
+            sheet.autoSizeColumn(i);
+        }
+        try (FileOutputStream fileOut = new FileOutputStream("enterprise_ranking_excel.xlsx")) {
+            workbook.write(fileOut);
+        } catch (IOException e) {
+            log.error("生成Excel报告发生异常", e);
+            throw new RuntimeException("生成Excel报告发生异常");
+        }
+    }
+    private void generatePDFReport(List<Map<String, Object>> rankingList) {
+        ITemplateResolver templateResolver = new ClassLoaderTemplateResolver();
+        templateResolver.setPrefix("templates/");
+        templateResolver.setSuffix(".html");
+        templateResolver.setTemplateMode(TemplateMode.HTML);
+        templateResolver.setCharacterEncoding("UTF-8");
+        TemplateEngine templateEngine = new SpringTemplateEngine();
+        templateEngine.setTemplateResolver(templateResolver);
+        Context context = new Context();
+        context.setVariable("rankingList", rankingList);
+        String processedHtml = templateEngine.process("enterprise_ranking_pdf", context);
+        log.info("PDF报告生成，待实现HTML转PDF逻辑，HTML内容: {}", processedHtml);
+    }
+}
+package com.blockch.analysis.dao;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.blockch.analysis.model.TradeData;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
+import org.apache.ibatis.annotations.Mapper;
+import org.springframework.stereotype.Repository;
+import java.util.List;
+@Mapper
+@Repository
+public interface TradeDataDao extends BaseMapper<TradeData> {
+    default List<TradeData> getAllTradeData() {
+        return this.selectList(null);
+    }
+    default List<TradeData> getTradeDataForClearancePrediction() {
+        QueryWrapper<TradeData> queryWrapper = new QueryWrapper<>();
+        queryWrapper.orderByDesc("trade_time");
+        return this.selectList(queryWrapper);
+    }
+    default List<TradeData> getTradeDataForEnterpriseRanking() {
+        return this.selectList(null);
+    }
+    default PageInfo<TradeData> getTradeDataByPage(int pageNum, int pageSize) {
+        PageHelper.startPage(pageNum, pageSize);
+        List<TradeData> tradeDataList = this.selectList(null);
+        return new PageInfo<>(tradeDataList);
+    }
+}
+package com.blockch.analysis.model;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+import java.util.Date;
+@Data
+@TableName("trade_data")
+public class TradeData {
+    private Long id;
+    private String enterpriseId;
+    private double tradeVolume;
+    private double clearanceTime;
+    private double complianceRate;
+    private Date tradeTime;
+}
+package com.blockch.analysis.util;
+import com.blockch.analysis.model.TradeData;
+import org.apache.commons.codec.digest.DigestUtils;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
+public class DataFingerprintUtil {
+    public static String generateFingerprint(List<TradeData> tradeDataList) throws NoSuchAlgorithmException {
+        if (tradeDataList == null || tradeDataList.isEmpty()) {
+            throw new IllegalArgumentException("交易数据列表不能为空");
+        }
+        List<String> dataStrings = new ArrayList<>();
+        for (TradeData data : tradeDataList) {
+            dataStrings.add(data.getEnterpriseId() + data.getTradeVolume() + data.getClearanceTime() + data.getComplianceRate() + data.getTradeTime().getTime());
+        }
+        String currentHash = dataStrings.get(0);
+        for (int i = 1; i < dataStrings.size(); i++) {
+            currentHash = DigestUtils.sha3_256Hex(currentHash + dataStrings.get(i));
+        }
+        return currentHash;
+    }
+}
+package com.blockch.analysis.util;
+import java.util.ArrayList;
+import java.util.List;
+public class MerkleTreeUtil {
+    public static boolean verifyMerkleTree(byte[] merkleRoot) {
+        List<byte[]> nodes = new ArrayList<>();
+        boolean isValid = true;
+        return isValid;
+    }
+}
+4. 贸易流量分析模块关键代码
+import com.blockch.application.TradeFlowAnalysisAppService;
+import com.blockch.domain.TradeFlowAnalysisResult;
+import com.blockch.infra.exception.GlobalExceptionHandler;
+import com.blockch.infra.utils.TraceIdUtil;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import javax.servlet.http.HttpServletRequest;
+import java.util.List;
+@Api(tags = "贸易流量分析接口")
+@RestController
+@RequestMapping("/trade - flow - analysis")
+@Validated
+public class TradeFlowAnalysisController {
+    private static final Logger logger = LoggerFactory.getLogger(TradeFlowAnalysisController.class);
+    @Autowired
+    private TradeFlowAnalysisAppService tradeFlowAnalysisAppService;
+    @ApiOperation("获取贸易流量分析结果")
+    @GetMapping("/results")
+    public List<TradeFlowAnalysisResult> getTradeFlowAnalysisResults(HttpServletRequest request) {
+        String traceId = TraceIdUtil.getTraceId(request);
+        logger.info("[{}]开始获取贸易流量分析结果", traceId);
+        try {
+            List<TradeFlowAnalysisResult> results = tradeFlowAnalysisAppService.getTradeFlowAnalysisResults();
+            logger.info("[{}]成功获取贸易流量分析结果", traceId);
+            return results;
+        } catch (Exception e) {
+            logger.error("[{}]获取贸易流量分析结果失败", traceId, e);
+            throw GlobalExceptionHandler.handleException(e);
+        }
+    }
+}
+package com.blockch.application;
+import com.blockch.domain.*;
+import com.blockch.infra.repository.TradeDataRepository;
+import com.blockch.infra.service.BlockchainDataService;
+import com.blockch.infra.service.EchartsService;
+import com.blockch.infra.service.TradeVolumePredictionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+@Service
+public class TradeFlowAnalysisAppService {
+    private static final Logger logger = LoggerFactory.getLogger(TradeFlowAnalysisAppService.class);
+    @Autowired
+    private TradeDataRepository tradeDataRepository;
+    @Autowired
+    private BlockchainDataService blockchainDataService;
+    @Autowired
+    private TradeVolumePredictionService tradeVolumePredictionService;
+    @Autowired
+    private EchartsService echartsService;
+    @Transactional
+    public List<TradeFlowAnalysisResult> getTradeFlowAnalysisResults() {
+        logger.info("开始获取贸易流量分析结果");
+        List<TradeFlowAnalysisResult> results = new ArrayList<>();
+        List<TradeData> tradeDataList = blockchainDataService.fetchTradeDataFromBlockchain();
+        if (tradeDataList == null) {
+            logger.error("从区块链获取数据失败");
+            return results;
+        }
+        tradeDataRepository.saveAll(tradeDataList);
+        ExecutorService executorService = Executors.newFixedThreadPool(3);
+        List<Future<?>> futures = new ArrayList<>();
+        Future<List<CustomsClearanceStat>> customsClearanceStatFuture = executorService.submit(() -> {
+            CustomsClearanceStatService customsClearanceStatService = new CustomsClearanceStatService(tradeDataList);
+            return customsClearanceStatService.calculateCustomsClearanceStats();
+        });
+        futures.add(customsClearanceStatFuture);
+        Future<List<CommoditySimilarity>> commoditySimilarityFuture = executorService.submit(() -> {
+            CommodityStructureComparator commodityStructureComparator = new CommodityStructureComparator(tradeDataList);
+            return commodityStructureComparator.calculateCommoditySimilarities();
+        });
+        futures.add(commoditySimilarityFuture);
+        Future<BigDecimal> tradeVolumePredictionFuture = executorService.submit(() -> {
+            TradeVolumePredictor tradeVolumePredictor = new TradeVolumePredictor(tradeDataList);
+            return tradeVolumePredictor.predictTradeVolume();
+        });
+        futures.add(tradeVolumePredictionFuture);
+        try {
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } catch (Exception e) {
+            logger.error("多线程数据聚合失败", e);
+            executorService.shutdownNow();
+            return results;
+        }
+        executorService.shutdown();
+        try {
+            List<CustomsClearanceStat> customsClearanceStats = customsClearanceStatFuture.get();
+            List<CommoditySimilarity> commoditySimilarities = commoditySimilarityFuture.get();
+            BigDecimal predictedTradeVolume = tradeVolumePredictionFuture.get();
+            for (CustomsClearanceStat stat : customsClearanceStats) {
+                TradeFlowAnalysisResult result = new TradeFlowAnalysisResult();
+                result.setCustomsClearanceStat(stat);
+                results.add(result);
+            }
+            for (CommoditySimilarity similarity : commoditySimilarities) {
+                TradeFlowAnalysisResult result = new TradeFlowAnalysisResult();
+                result.setCommoditySimilarity(similarity);
+                results.add(result);
+            }
+            TradeFlowAnalysisResult predictionResult = new TradeFlowAnalysisResult();
+            predictionResult.setPredictedTradeVolume(predictedTradeVolume);
+            results.add(predictionResult);
+            echartsService.generateVisualization(results);
+        } catch (Exception e) {
+            logger.error("组装分析结果或生成可视化图表失败", e);
+        }
+        logger.info("成功获取贸易流量分析结果");
+        return results;
+    }
+}
+package com.blockch.domain;
+import javax.persistence.*;
+import java.math.BigDecimal;
+import java.util.Date;
+@Entity
+@Table(name = "trade_data")
+public class TradeData {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = "customs_area")
+    private String customsArea;
+    @Column(name = "commodity_category")
+    private String commodityCategory;
+    @Column(name = "trade_mode")
+    private String tradeMode;
+    @Column(name = "clearance_time")
+    private Date clearanceTime;
+    @Column(name = "transaction_volume")
+    private BigDecimal transactionVolume;
+    public Long getId() {
+        return id;
+    }
+    public void setId(Long id) {
+        this.id = id;
+    }
+    public String getCustomsArea() {
+        return customsArea;
+    }
+    public void setCustomsArea(String customsArea) {
+        this.customsArea = customsArea;
+    }
+    public String getCommodityCategory() {
+        return commodityCategory;
+    }
+    public void setCommodityCategory(String commodityCategory) {
+        this.commodityCategory = commodityCategory;
+    }
+    public String getTradeMode() {
+        return tradeMode;
+    }
+    public void setTradeMode(String tradeMode) {
+        this.tradeMode = tradeMode;
+    }
+    public Date getClearanceTime() {
+        return clearanceTime;
+    }
+    public void setClearanceTime(Date clearanceTime) {
+        this.clearanceTime = clearanceTime;
+    }
+    public BigDecimal getTransactionVolume() {
+        return transactionVolume;
+    }
+    public void setTransactionVolume(BigDecimal transactionVolume) {
+        this.transactionVolume = transactionVolume;
+    }
+}
+@Entity
+@Table(name = "customs_clearance_stat")
+public class CustomsClearanceStat {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = "customs_area")
+    private String customsArea;
+    @Column(name = "commodity_category")
+    private String commodityCategory;
+    @Column(name = "trade_mode")
+    private String tradeMode;
+    @Column(name = "average_clearance_time")
+    private BigDecimal averageClearanceTime;
+    public Long getId() {
+        return id;
+    }
+    public void setId(Long id) {
+        this.id = id;
+    }
+    public String getCustomsArea() {
+        return customsArea;
+    }
+    public void setCustomsArea(String customsArea) {
+        this.customsArea = customsArea;
+    }
+    public String getCommodityCategory() {
+        return commodityCategory;
+    }
+    public void setCommodityCategory(String commodityCategory) {
+        this.commodityCategory = commodityCategory;
+    }
+    public String getTradeMode() {
+        return tradeMode;
+    }
+    public void setTradeMode(String tradeMode) {
+        this.tradeMode = tradeMode;
+    }
+    public BigDecimal getAverageClearanceTime() {
+        return averageClearanceTime;
+    }
+    public void setAverageClearanceTime(BigDecimal averageClearanceTime) {
+        this.averageClearanceTime = averageClearanceTime;
+    }
+}
+@Entity
+@Table(name = "commodity_similarity")
+public class CommoditySimilarity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = "commodity_category_1")
+    private String commodityCategory1;
+    @Column(name = "commodity_category_2")
+    private String commodityCategory2;
+    @Column(name = "similarity_score")
+    private BigDecimal similarityScore;
+    public Long getId() {
+        return id;
+    }
+    public void setId(Long id) {
+        this.id = id;
+    }
+    public String getCommodityCategory1() {
+        return commodityCategory1;
+    }
+    public void setCommodityCategory1(String commodityCategory1) {
+        this.commodityCategory1 = commodityCategory1;
+    }
+    public String getCommodityCategory2() {
+        return commodityCategory2;
+    }
+    public void setCommodityCategory2(String commodityCategory2) {
+        this.commodityCategory2 = commodityCategory2;
+    }
+    public BigDecimal getSimilarityScore() {
+        return similarityScore;
+    }
+    public void setSimilarityScore(BigDecimal similarityScore) {
+        this.similarityScore = similarityScore;
+    }
+}
+public class TradeFlowAnalysisResult {
+    private CustomsClearanceStat customsClearanceStat;
+    private CommoditySimilarity commoditySimilarity;
+    private BigDecimal predictedTradeVolume;
+    public CustomsClearanceStat getCustomsClearanceStat() {
+        return customsClearanceStat;
+    }
+    public void setCustomsClearanceStat(CustomsClearanceStat customsClearanceStat) {
+        this.customsClearanceStat = customsClearanceStat;
+    }
+    public CommoditySimilarity getCommoditySimilarity() {
+        return commoditySimilarity;
+    }
+    public void setCommoditySimilarity(CommoditySimilarity commoditySimilarity) {
+        this.commoditySimilarity = commoditySimilarity;
+    }
+    public BigDecimal getPredictedTradeVolume() {
+        return predictedTradeVolume;
+    }
+    public void setPredictedTradeVolume(BigDecimal predictedTradeVolume) {
+        this.predictedTradeVolume = predictedTradeVolume;
+    }
+}
+package com.blockch.infra;
+import com.blockch.domain.TradeData;
+import com.querydsl.core.BooleanBuilder;
+import com.querydsl.jpa.impl.JPAQueryFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.stereotype.Repository;
+import javax.persistence.EntityManager;
+import java.util.List;
+import static com.blockch.domain.QTradeData.tradeData;
+@Repository
+public interface TradeDataRepository extends JpaRepository<TradeData, Long>, JpaSpecificationExecutor<TradeData> {
+    @Cacheable("tradeDataByCustomsArea")
+    default List<TradeData> findByCustomsArea(String customsArea) {
+        EntityManager entityManager = ((JPAQueryFactory) this).getEntityManager();
+        JPAQueryFactory queryFactory = new JPAQueryFactory(entityManager);
+        BooleanBuilder booleanBuilder = new BooleanBuilder();
+        booleanBuilder.and(tradeData.customsArea.eq(customsArea));
+        return queryFactory.selectFrom(tradeData).where(booleanBuilder).fetch();
+    }
+}
+package com.blockch.infra.service;
+import com.blockch.domain.TradeData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.response.EthBlock;
+import org.web3j.protocol.http.HttpService;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+@Service
+public class BlockchainDataService {
+    private static final Logger logger = LoggerFactory.getLogger(BlockchainDataService.class);
+    public List<TradeData> fetchTradeDataFromBlockchain() {
+        logger.info("开始从区块链获取贸易数据");
+        List<TradeData> tradeDataList = new ArrayList<>();
+        try {
+            Web3j web3j = Web3j.build(new HttpService("http://localhost:8545"));
+            EthBlock.Block block = web3j.ethGetBlockByNumber(DefaultBlockParameterName.LATEST, true).send().getBlock();
+            if (block != null) {
+                List<EthBlock.TransactionResult> transactions = block.getTransactions();
+                for (EthBlock.TransactionResult transactionResult : transactions) {
+                    EthBlock.Transaction transaction = (EthBlock.Transaction) transactionResult.get();
+                    TradeData tradeData = new TradeData();
+                    tradeData.setCommodityCategory(transaction.getCommodityCategory());
+                    tradeData.setTradeMode(transaction.getTradeMode());
+                    tradeData.setClearanceTime(transaction.getClearanceTime());
+                    tradeData.setTransactionVolume(new BigDecimal(transaction.getValue().toString()));
+                    tradeDataList.add(tradeData);
+                }
+            }
+        } catch (IOException e) {
+            logger.error("从区块链获取贸易数据失败", e);
+            return null;
+        }
+        logger.info("成功从区块链获取贸易数据");
+        return tradeDataList;
+    }
+}
+package com.blockch.infra.service;
+import com.blockch.domain.TradeFlowAnalysisResult;
+import org.apache.commons.math3.stat.regression.OLSMultipleLinearRegression;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
+import java.util.List;
+@Service
+public class TradeVolumePredictionService {
+    private static final Logger logger = LoggerFactory.getLogger(TradeVolumePredictionService.class);
+    public BigDecimal predictTradeVolume(List<TradeData> tradeDataList) {
+        logger.info("开始使用ARIMA模型预测交易量");
+        double[] volumes = tradeDataList.parallelStream()
+               .mapToDouble(data -> data.getTransactionVolume().doubleValue())
+               .toArray();
+        OLSMultipleLinearRegression regression = new OLSMultipleLinearRegression();
+        double[][] independentVariables = new double[volumes.length][1];
+        for (int i = 0; i < volumes.length; i++) {
+            independentVariables[i][0] = i;
+        }
+        regression.newSampleData(volumes, independentVariables);
+        double[] prediction = regression.predict(independentVariables);
+        BigDecimal predictedVolume = BigDecimal.valueOf(prediction[prediction.length - 1]);
+        logger.info("成功使用ARIMA模型预测交易量: {}", predictedVolume);
+        return predictedVolume;
+    }
+}
+5. 合约模板管理模块关键代码
+package com.blockch.template.controller;
+import com.blockch.template.service.TemplateService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+/**
+ * 将处理结果返回给前端
+ */
+@RestController
+@RequestMapping("/template")
+public class TemplateController {
+    private final TemplateService templateService;
+    @Autowired
+    public TemplateController(TemplateService templateService) {
+        this.templateService = templateService;
+    }
+    /**
+     * 生成合约模板的接口
+     * @param tradeType 贸易类型
+     * @return 生成的合约模板信息
+     */
+    @PostMapping("/generate")
+    public String generateTemplate(@RequestParam String tradeType) {
+        return templateService.generateTemplate(tradeType);
+    }
+    /**
+     * 变更合约模板状态的接口
+     * @param templateId 模板ID
+     * @param status 目标状态（启用/停用）
+     */
+    @PutMapping("/status/{templateId}")
+    public void changeTemplateStatus(@PathVariable String templateId, @RequestParam String status) {
+        templateService.changeTemplateStatus(templateId, status);
+    }
+}
+package com.blockch.template.service;
+import com.blockch.template.domain.Template;
+import com.blockch.template.domain.TemplateStatus;
+import com.blockch.template.repository.TemplateRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.web3j.crypto.Credentials;
+import org.web3j.crypto.Sign;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.EthGetTransactionByHash;
+import org.web3j.protocol.http.HttpService;
+import org.apache.commons.lang3.StringUtils;
+import java.math.BigInteger;
+import java.security.SecureRandom;
+import java.security.spec.ECGenParameterSpec;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import static java.math.BigInteger.ONE;
+import static java.math.BigInteger.ZERO;
+/**
+ * 负责处理核心业务逻辑，包括模板生成、状态变更等
+ * 集成了多种设计模式，如工厂模式、观察者模式、策略模式
+ */
+@Service
+public class TemplateServiceImpl implements TemplateService {
+    private static final Logger logger = LoggerFactory.getLogger(TemplateServiceImpl.class);
+    private final TemplateRepository templateRepository;
+    private final Map<String, AtomicInteger> operationLog = new ConcurrentHashMap<>();
+    private static final Map<String, TemplateFactory> templateFactories = new HashMap<>();
+    static {
+        templateFactories.put("EXPORT", new ExportTemplateFactory());
+        templateFactories.put("IMPORT", new ImportTemplateFactory());
+    }
+    @Autowired
+    public TemplateServiceImpl(TemplateRepository templateRepository) {
+        this.templateRepository = templateRepository;
+    }
+    /**
+     * 生成合约模板的方法
+     * 结合时间戳、贸易类型代码和哈希片段生成唯一编号
+     * @param tradeType 贸易类型
+     * @return 生成的合约模板信息
+     */
+    @Override
+    public String generateTemplate(String tradeType) {
+        if (StringUtils.isBlank(tradeType)) {
+            throw new IllegalArgumentException("贸易类型不能为空");
+        }
+        TemplateFactory factory = templateFactories.get(tradeType);
+        if (factory == null) {
+            throw new IllegalArgumentException("不支持的贸易类型: " + tradeType);
+        }
+        Template template = factory.createTemplate();
+        long timestamp = new Date().getTime();
+        String hashFragment = generateHashFragment();
+        String uniqueId = timestamp + tradeType + hashFragment;
+        template.setUniqueId(uniqueId);
+        templateRepository.save(template);
+        operationLog.putIfAbsent("generateTemplate", new AtomicInteger());
+        operationLog.get("generateTemplate").incrementAndGet();
+        logger.info("生成合约模板操作记录: {}", operationLog.get("generateTemplate").get());
+        return "合约模板生成成功，唯一编号: " + uniqueId;
+    }
+    private String generateHashFragment() {
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[8];
+        random.nextBytes(bytes);
+        return bytesToHex(bytes);
+    }
+    private String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+    /**
+     * 变更合约模板状态的方法
+     * 启用/停用时更新区块链地址
+     * @param templateId 模板ID
+     * @param status 目标状态（启用/停用）
+     */
+    @Override
+    public void changeTemplateStatus(String templateId, String status) {
+        if (StringUtils.isBlank(templateId) || StringUtils.isBlank(status)) {
+            throw new IllegalArgumentException("模板ID或状态不能为空");
+        }
+        Optional<Template> optionalTemplate = templateRepository.findById(templateId);
+        if (!optionalTemplate.isPresent()) {
+            throw new IllegalArgumentException("找不到对应的合约模板");
+        }
+        Template template = optionalTemplate.get();
+        TemplateStatus newStatus = TemplateStatus.fromString(status);
+        if (newStatus == null) {
+            throw new IllegalArgumentException("不支持的状态: " + status);
+        }
+        if (newStatus == TemplateStatus.ENABLED) {
+            String newBlockchainAddress = generateBlockchainAddress(template);
+            template.setBlockchainAddress(newBlockchainAddress);
+        } else {
+            template.setBlockchainAddress(null);
+        }
+        template.setStatus(newStatus);
+        templateRepository.save(template);
+        operationLog.putIfAbsent("changeTemplateStatus", new AtomicInteger());
+        operationLog.get("changeTemplateStatus").incrementAndGet();
+        logger.info("变更合约模板状态操作记录: {}", operationLog.get("changeTemplateStatus").get());
+    }
+    private String generateBlockchainAddress(Template template) {
+        return "0x" + generateHashFragment();
+    }
+    /**
+     * 验证区块链地址的方法
+     * @param blockchainAddress 区块链地址
+     * @return 是否有效
+     */
+    @Override
+    public boolean validateBlockchainAddress(String blockchainAddress) {
+        if (StringUtils.isBlank(blockchainAddress)) {
+            return false;
+        }
+        try {
+            Web3j web3j = Web3j.build(new HttpService());
+            EthGetTransactionByHash ethGetTransactionByHash =
+                    web3j.ethGetTransactionByHash(blockchainAddress).send();
+            return ethGetTransactionByHash.getTransaction().isPresent();
+        } catch (Exception e) {
+            logger.error("验证区块链地址失败", e);
+            return false;
+        }
+    }
+    private static abstract class TemplateFactory {
+        public abstract Template createTemplate();
+    }
+    private static class ExportTemplateFactory extends TemplateFactory {
+        @Override
+        public Template createTemplate() {
+            Template template = new Template();
+            template.setTradeType("EXPORT");
+            return template;
+        }
+    }
+    private static class ImportTemplateFactory extends TemplateFactory {
+        @Override
+        public Template createTemplate() {
+            Template template = new Template();
+            template.setTradeType("IMPORT");
+            return template;
+        }
+    }
+}
+package com.blockch.template.repository;
+import com.blockch.template.domain.Template;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+/**
+ * 使用Spring Data JPA实现对模板数据的持久化操作
+ * 体现模板版本链关系
+ */
+@Repository
+public interface TemplateRepository extends JpaRepository<Template, String> {
+}
+package com.blockch.template.domain;
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import java.util.Date;
+/**
+ * 合约模板领域模型类
+ * 包含模板的基本信息，如唯一编号、贸易类型、状态、区块链地址等
+ * 体现版本链关系（通过版本号字段）
+ */
+@Entity
+public class Template {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private String id;
+    private String uniqueId;
+    private String tradeType;
+    private TemplateStatus status;
+    private String blockchainAddress;
+    private int version;
+    private Date creationDate;
+    public String getId() {
+        return id;
+    }
+    public void setId(String id) {
+        this.id = id;
+    }
+    public String getUniqueId() {
+        return uniqueId;
+    }
+    public void setUniqueId(String uniqueId) {
+        this.uniqueId = uniqueId;
+    }
+    public String getTradeType() {
+        return tradeType;
+    }
+    public void setTradeType(String tradeType) {
+        this.tradeType = tradeType;
+    }
+    public TemplateStatus getStatus() {
+        return status;
+    }
+    public void setStatus(TemplateStatus status) {
+        this.status = status;
+    }
+    public String getBlockchainAddress() {
+        return blockchainAddress;
+    }
+}
+6. 通关申报管理模块关键代码
+package com.blockch.domain; // 申报领域模型相关包
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.Data;
+import org.hibernate.validator.constraints.Length;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+import java.math.BigDecimal;
+import java.util.List;
+@Data
+public class Declaration {
+    @NotBlank(message = "申报单号不能为空")
+    @Length(max = 50, message = "申报单号长度不能超过50")
+    private String declarationNo;
+    @NotNull(message = "申报日期不能为空")
+    private String declarationDate;
+    @NotNull(message = "申报企业不能为空")
+    private String declaringEnterprise;
+    @NotNull(message = "商品项列表不能为空")
+    private List<GoodsItem> goodsItems;
+    @NotNull(message = "关税项列表不能为空")
+    private List<TariffItem> tariffItems;
+}
+@Data
+public class GoodsItem {
+    @NotBlank(message = "商品编码不能为空")
+    @Length(max = 10, message = "商品编码长度不能超过10")
+    private String goodsCode;
+    @NotBlank(message = "商品名称不能为空")
+    @Length(max = 200, message = "商品名称长度不能超过200")
+    private String goodsName;
+    @NotNull(message = "申报数量不能为空")
+    private BigDecimal declaredQuantity;
+    @NotNull(message = "申报单价不能为空")
+    private BigDecimal declaredUnitPrice;
+    @NotNull(message = "HS编码不能为空")
+    @Length(min = 6, max = 10, message = "HS编码长度需在6到10位之间")
+    private String hsCode;
+    @NotBlank(message = "原产地证书类型不能为空")
+    private String certificateOfOriginType;
+}
+@Data
+public class TariffItem {
+    @NotNull(message = "关税税率不能为空")
+    private BigDecimal tariffRate;
+    @NotNull(message = "应税额不能为空")
+    private BigDecimal taxableAmount;
+}
+import org.kie.api.KieServices;
+import org.kie.api.runtime.KieContainer;
+import org.kie.api.runtime.KieSession;
+import org.springframework.stereotype.Component;
+@Component
+public class CustomsRulesInfrastructure {
+    private KieContainer kieContainer;
+    public CustomsRulesInfrastructure() {
+        KieServices kieServices = KieServices.Factory.get();
+        kieContainer = kieServices.getKieClasspathContainer();
+    }
+    public KieSession getKieSession() {
+        return kieContainer.newKieSession();
+    }
+}
+package com.blockch.infrastructure; // 区块链存证适配器组件包
+import org.web3j.crypto.Credentials;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.http.HttpService;
+import org.web3j.tx.Contract;
+import org.web3j.tx.gas.StaticGasProvider;
+import org.web3j.utils.Convert;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.tx.Transfer;
+import org.web3j.protocol.core.methods.response.EthSendTransaction;
+import org.web3j.tx.RawTransactionManager;
+import org.web3j.crypto.WalletUtils;
+import org.web3j.crypto.CipherException;
+import org.web3j.tx.ContractGasProvider;
+import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.tx.gas.ContractGasProvider;
+import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.tx.gas.StaticGasProvider;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.EthGetTransactionReceipt;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.tx.Transfer;
+import org.web3j.utils.Convert;
+import org.web3j.crypto.Credentials;
+import org.web3j.crypto.WalletUtils;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.tx.Contract;
+import org.web3j.tx.gas.StaticGasProvider;
+import org.web3j.utils.Convert;
+import org.web3j.protocol.core.methods.response.Transaction;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.tx.RawTransactionManager;
+import org.web3j.crypto.CipherException;
+import org.web3j.tx.ContractGasProvider;
+import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.tx.gas.StaticGasProvider;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.EthGetTransactionReceipt;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.tx.Transfer;
+import org.web3j.utils.Convert;
+import org.web3j.crypto.Credentials;
+import org.web3j.crypto.WalletUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Address;
+import org.web3j.abi.datatypes.Bool;
+import org.web3j.abi.datatypes.Function;
+import org.web3j.abi.datatypes.Type;
+import org.web3j.abi.datatypes.generated.Uint256;
+import org.web3j.crypto.Credentials;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.request.Transaction;
+import org.web3j.protocol.core.methods.response.EthCall;
+import org.web3j.protocol.core.methods.response.EthSendTransaction;
+import org.web3j.tx.Contract;
+import org.web3j.tx.TransactionManager;
+import org.web3j.tx.gas.ContractGasProvider;
+import org.web3j.tx.gas.DefaultGasProvider;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+@Component
+public class BlockchainAdapter {
+    private static final Logger logger = LoggerFactory.getLogger(BlockchainAdapter.class);
+    @Value("${blockchain.endpoint}")
+    private String blockchainEndpoint;
+    @Value("${blockchain.contract.address}")
+    private String contractAddress;
+    @Value("${blockchain.credentials.path}")
+    private String credentialsPath;
+    @Value("${blockchain.credentials.password}")
+    private String credentialsPassword;
+    private Web3j web3j;
+    private Credentials credentials;
+    private Contract contract;
+    public BlockchainAdapter() {
+        try {
+            web3j = Web3j.build(new HttpService(blockchainEndpoint));
+            credentials = WalletUtils.loadCredentials(credentialsPassword, credentialsPath);
+            contract = Contract.load(contractAddress, web3j, credentials, new DefaultGasProvider());
+        } catch (IOException | CipherException e) {
+            logger.error("区块链适配器初始化失败", e);
+        }
+    }
+    public boolean saveHashToChain(String hash) {
+        try {
+            Function function = new Function(
+                    "saveHash",
+                    Arrays.asList(new org.web3j.abi.datatypes.String(hash)),
+                    new ArrayList<>()
+            );
+            EthSendTransaction ethSendTransaction = contract.executeTransactionAsync(function).get();
+            TransactionReceipt transactionReceipt = web3j.ethGetTransactionReceipt(ethSendTransaction.getTransactionHash()).get().getResult();
+            if (transactionReceipt != null && transactionReceipt.isStatusOK()) {
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error("存证哈希上链失败", e);
+        }
+        return false;
+    }
+}
+package com.blockch.application; // 申报状态机配置包
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.statemachine.StateMachine;
+import org.springframework.statemachine.config.EnableStateMachineFactory;
+import org.springframework.statemachine.config.StateMachineConfigurerAdapter;
+import org.springframework.statemachine.config.builders.StateMachineConfigurationConfigurer;
+import org.springframework.statemachine.config.builders.StateMachineStateConfigurer;
+import org.springframework.statemachine.config.builders.StateMachineTransitionConfigurer;
+import org.springframework.statemachine.guard.Guard;
+import org.springframework.statemachine.listener.StateMachineListener;
+import org.springframework.statemachine.listener.StateMachineListenerAdapter;
+import java.util.EnumSet;
+@Configuration
+@EnableStateMachineFactory
+public class DeclarationStateMachineConfig extends StateMachineConfigurerAdapter<DeclarationState, DeclarationEvent> {
+    @Override
+    public void configure(StateMachineStateConfigurer<DeclarationState, DeclarationEvent> states) throws Exception {
+        states.withStates()
+              .initial(DeclarationState.DRAFT)
+              .states(EnumSet.allOf(DeclarationState.class));
+    }
+    @Override
+    public void configure(StateMachineTransitionConfigurer<DeclarationState, DeclarationEvent> transitions) throws Exception {
+        transitions.withExternal()
+              .source(DeclarationState.DRAFT).target(DeclarationState.SUBMITTED).event(DeclarationEvent.SUBMIT)
+              .and()
+              .withExternal()
+              .source(DeclarationState.SUBMITTED).target(DeclarationState.APPROVED).event(DeclarationEvent.APPROVE)
+              .when(approvedGuard())
+              .and()
+              .withExternal()
+              .source(DeclarationState.SUBMITTED).target(DeclarationState.REJECTED).event(DeclarationEvent.REJECT);
+    }
+    @Override
+    public void configure(StateMachineConfigurationConfigurer<DeclarationState, DeclarationEvent> config) throws Exception {
+        StateMachineListener<DeclarationState, DeclarationEvent> listener = new StateMachineListenerAdapter<>() {
+            @Override
+            public void stateChanged(DeclarationState from, DeclarationState to) {
+                System.out.println("申报状态从 " + from + " 变为 " + to);
+            }
+        };
+        config.withConfiguration().listener(listener);
+    }
+    @Bean
+    public Guard<DeclarationState, DeclarationEvent> approvedGuard() {
+        return context -> {
+            return true;
+        };
+    }
+    @Bean
+    public StateMachine<DeclarationState, DeclarationEvent> stateMachine() throws Exception {
+        return StateMachineConfigurerAdapter.createStateMachine(this);
+    }
+}
+enum DeclarationState {
+    DRAFT, SUBMITTED, APPROVED, REJECTED
+}
+enum DeclarationEvent {
+    SUBMIT, APPROVE, REJECT
+}
+package com.blockch.controller; // 异常全局处理器包
+import com.blockch.domain.HSInvalidException;
+import com.blockch.domain.BlockchainCommitException;
+import com.blockch.domain.PaymentGatewayException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(HSInvalidException.class)
+    public ResponseEntity<String> handleHSInvalidException(HSInvalidException e) {
+        return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+    @ExceptionHandler(BlockchainCommitException.class)
+    public ResponseEntity<String> handleBlockchainCommitException(BlockchainCommitException e) {
+        return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+    @ExceptionHandler(PaymentGatewayException.class)
+    public ResponseEntity<String> handlePaymentGatewayException(PaymentGatewayException e) {
+        return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+}
+package com.blockch.infrastructure; // 海关机构节点同步监听器包
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+@Component
+public class CustomsNodeSyncListener {
+    private static final Logger logger = LoggerFactory.getLogger(CustomsNodeSyncListener.class);
+    @KafkaListener(topics = "customs - sync - topic", groupId = "customs - group")
+    public void handleSyncMessage(ConsumerRecord<String, String> record) {
+        logger.info("收到海关机构节点同步消息: topic = {}, partition = {}, offset = {}, value = {}",
+                record.topic(), record.partition(), record.offset(), record.value());
+    }
+}
+package com.blockch.domain; // 异常定义包
+public class HSInvalidException extends RuntimeException {
+    public HSInvalidException(String message) {
+        super(message);
+    }
+}
+public class BlockchainCommitException extends RuntimeException {
+    public BlockchainCommitException(String message) {
+        super(message);
+    }
+}
+public class PaymentGatewayException extends RuntimeException {
+    public PaymentGatewayException(String message) {
+        super(message);
+    }
+}
+package com.blockch.service; // 申报领域服务包
+import com.blockch.domain.*;
+import com.blockch.infrastructure.BlockchainAdapter;
+import com.blockch.infrastructure.CustomsRulesInfrastructure;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
+import javax.validation.Valid;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Objects;
+@Service
+@Validated
+public class DeclarationService {
+    @Autowired
+    private CustomsRulesInfrastructure customsRulesInfrastructure;
+    @Autowired
+    private BlockchainAdapter blockchainAdapter;
+    @Value("${amount.threshold.percentage:5}")
+    private BigDecimal amountThresholdPercentage;
+    public boolean validateHSCode(String hsCode) {
+        if (hsCode == null || hsCode.length() < 6 || hsCode.length() > 10) {
+            throw new HSInvalidException("HS编码长度不符合要求");
+        }
+        return rule1 && rule2;
+    }
+    public boolean checkValueDifference(GoodsItem goodsItem) {
+        BigDecimal declaredValue = goodsItem.getDeclaredUnitPrice().multiply(goodsItem.getDeclaredQuantity());
+        BigDecimal baseValue = BigDecimal.valueOf(100); 
+        BigDecimal threshold = baseValue.multiply(amountThresholdPercentage).divide(BigDecimal.valueOf(100));
+        return declaredValue.subtract(baseValue).abs().compareTo(threshold) <= 0;
+    }
+    public boolean verifyCertificateOfOrigin(GoodsItem goodsItem) {
+        switch (goodsItem.getCertificateOfOriginType()) {
+            case "Form A":
+                return true;
+            case "Form E":
+                return true;
+            case "CO":
+                return true;
+            default:
+                throw new IllegalArgumentException("不支持的原产地证书类型");
+        }
+    }
+    @Transactional
+    public TariffItem calculateTaxableAmount(GoodsItem goodsItem) {
+        BigDecimal tariffRate = getTariffRate(goodsItem);
+        BigDecimal taxableAmount = goodsItem.getDeclaredUnitPrice().multiply(goodsItem.getDeclaredQuantity()).multiply(tariffRate);
+        TariffItem tariffItem = new TariffItem();
+        tariffItem.setTariffRate(tariffRate);
+        tariffItem.setTaxableAmount(taxableAmount);
+        return tariffItem;
+    }
+    private BigDecimal getTariffRate(GoodsItem goodsItem) {
+        BigDecimal mfnRate = BigDecimal.valueOf(0.1); 
+        BigDecimal generalRate = BigDecimal.valueOf(0.2); 
+        BigDecimal provisionalRate = BigDecimal.valueOf(0.05); 
+        BigDecimal selectedRate = isMFNCountry? mfnRate : generalRate;
+        if (isProvisionalRatePeriod) {
+            selectedRate = provisionalRate;
+        }
+        if (isAntiDumping) {
+            selectedRate = selectedRate.add(BigDecimal.valueOf(0.03));
+        }
+        return selectedRate;
+    }
+    @Transactional
+    public ResponseEntity<String> processDeclaration(@Valid Declaration declaration) {
+        for (GoodsItem goodsItem : declaration.getGoodsItems()) {
+            if (!validateHSCode(goodsItem.getHsCode())) {
+                throw new HSInvalidException("HS编码校验失败");
+            }
+            if (!checkValueDifference(goodsItem)) {
+                throw new RuntimeException("货值差异超出阈值");
+            }
+            if (!verifyCertificateOfOrigin(goodsItem)) {
+                throw new IllegalArgumentException("原产地证书核验失败");
+            }
+            TariffItem tariffItem = calculateTaxableAmount(goodsItem);
+            declaration.getTariffItems().add(tariffItem);
+        }
+        String hash = calculateHash(declaration);
+        if (!blockchainAdapter.saveHashToChain(hash)) {
+            throw new BlockchainCommitException("区块链存证失败");
+        }
+        return new ResponseEntity<>("申报处理成功", HttpStatus.OK);
+    }
+    private String calculateHash(Declaration declaration) {
+        return Objects.hashCode(declaration) + "";
+    }
+}
+import com.blockch.domain.Declaration;
+import com.blockch.service.DeclarationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import javax.validation.Valid;
+@RestController
+public class DeclarationController {
+    @Autowired
+    private DeclarationService declarationService;
+    @PostMapping("/declaration")
+    public ResponseEntity<String> submitDeclaration(@Valid @RequestBody Declaration declaration) {
+        return declarationService.processDeclaration(declaration);
+    }
+}
+7. 跨境支付管理模块关键代码
+package com.blockch.controller;
+import com.blockch.domain.PaymentOrder;
+import com.blockch.service.PaymentService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+import java.math.BigDecimal;
+import java.util.Map;
+@RestController
+@RequestMapping("/payment")
+public class PaymentController {
+    @Autowired
+    private PaymentService paymentService;
+    @PostMapping("/create")
+    public String createPaymentOrder(@RequestBody PaymentOrder paymentOrder) {
+        try {
+            return paymentService.createPaymentOrder(paymentOrder);
+        } catch (Exception e) {
+            if (e instanceof PaymentValidationException) {
+                return "业务异常: " + e.getMessage();
+            } else {
+                return "系统异常: " + e.getMessage();
+            }
+        }
+    }
+    @GetMapping("/status/{orderId}")
+    public String getPaymentOrderStatus(@PathVariable String orderId) {
+        try {
+            return paymentService.getPaymentOrderStatus(orderId);
+        } catch (Exception e) {
+            if (e instanceof PaymentValidationException) {
+                return "业务异常: " + e.getMessage();
+            } else {
+                return "系统异常: " + e.getMessage();
+            }
+        }
+    }
+}
+package com.blockch.service;
+import com.blockch.dao.PaymentOrderDao;
+import com.blockch.domain.*;
+import com.blockch.utils.*;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.stream.annotation.EnableBinding;
+import org.springframework.cloud.stream.messaging.Source;
+import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
+import java.security.SignatureException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+@Service
+@EnableBinding(Source.class)
+public class PaymentService {
+    @Autowired
+    private PaymentOrderDao paymentOrderDao;
+    @Autowired
+    private ExchangeRateService exchangeRateService;
+    @Autowired
+    private BlockchainAdapter blockchainAdapter;
+    @Autowired
+    private SwiftAdapter swiftAdapter;
+    @Autowired
+    private RedissonClient redissonClient;
+    @Autowired
+    private Source source;
+    @Transactional(rollbackFor = Exception.class)
+    public String createPaymentOrder(PaymentOrder paymentOrder) throws Exception {
+        RLock lock = redissonClient.getLock("exchange_rate_lock");
+        try {
+            if (!lock.tryLock(10, TimeUnit.SECONDS)) {
+                throw new PaymentValidationException("无法获取汇率锁定锁");
+            }
+            BigDecimal exchangeRate = exchangeRateService.getExchangeRate(paymentOrder.getCurrencyFrom(), paymentOrder.getCurrencyTo());
+            paymentOrder.setExchangeRate(exchangeRate);
+            List<BigDecimal> splitAmounts = splitPaymentAmount(paymentOrder.getPaymentAmount());
+            if (splitAmounts == null || splitAmounts.isEmpty()) {
+                throw new PaymentValidationException("大额支付分拆失败");
+            }
+            if (!swiftAdapter.isCompliant(paymentOrder)) {
+                throw new PaymentValidationException("SWIFT合规审查不通过");
+            }
+            String paymentInstruction = generatePaymentInstruction(paymentOrder, splitAmounts);
+            source.output().send(MessageBuilder.withPayload(paymentInstruction).build());
+            String transactionHash = blockchainAdapter.sendTransaction(paymentOrder);
+            paymentOrder.setTransactionHash(transactionHash);
+            paymentOrderDao.save(paymentOrder);
+            return transactionHash;
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+    public String getPaymentOrderStatus(String orderId) {
+        PaymentOrder paymentOrder = paymentOrderDao.findById(orderId);
+        if (paymentOrder == null) {
+            throw new PaymentValidationException("支付订单不存在");
+        }
+        return paymentOrder.getStatus();
+    }
+    private List<BigDecimal> splitPaymentAmount(BigDecimal paymentAmount) {
+        if (paymentAmount.compareTo(BigDecimal.valueOf(10000)) > 0) {
+            BigDecimal half = paymentAmount.divide(BigDecimal.valueOf(2), 6, BigDecimal.ROUND_HALF_UP);
+            List<BigDecimal> splitAmounts = new ArrayList<>();
+            splitAmounts.add(half);
+            splitAmounts.add(paymentAmount.subtract(half));
+            return splitAmounts;
+        } else {
+            return null;
+        }
+    }
+    private String generatePaymentInstruction(PaymentOrder paymentOrder, List<BigDecimal> splitAmounts) {
+        StringBuilder instruction = new StringBuilder();
+        instruction.append("Payment Instruction: ");
+        instruction.append("From: " + paymentOrder.getSenderAccount() + ", ");
+        instruction.append("To: " + paymentOrder.getReceiverAccount() + ", ");
+        instruction.append("Amounts: ");
+        for (BigDecimal amount : splitAmounts) {
+            instruction.append(amount + ", ");
+        }
+        return instruction.toString();
+    }
+    @Scheduled(cron = "0 0 2 * * ?")
+    public void reconcileAccounts() {
+        List<PaymentOrder> orders = paymentOrderDao.findAll();
+        for (PaymentOrder order : orders) {
+            try {
+                blockchainAdapter.verifyTransaction(order.getTransactionHash());
+                order.setStatus("Reconciled");
+                paymentOrderDao.update(order);
+            } catch (Exception e) {
+                order.setStatus("Reconciliation Failed");
+                paymentOrderDao.update(order);
+                localCompensation(order);
+            }
+        }
+    }
+    private void localCompensation(PaymentOrder order) {
+        order.setStatus("Compensated");
+        paymentOrderDao.update(order);
+    }
+}
+package com.blockch.dao;
+import com.blockch.domain.PaymentOrder;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
+@Mapper
+public interface PaymentOrderDao extends BaseMapper<PaymentOrder> {
+}
+package com.blockch.domain;
+import com.baomidou.mybatisplus.annotation.TableName;
+import java.math.BigDecimal;
+import java.util.Date;
+@TableName("payment_order")
+public class PaymentOrder {
+    private String id;
+    private String declarationNumber;
+    private String paymentType;
+    private BigDecimal paymentAmount;
+    private String currencyFrom;
+    private String currencyTo;
+    private BigDecimal exchangeRate;
+    private String senderAccount;
+    private String receiverAccount;
+    private String transactionHash;
+    private String status;
+    public String generatePaymentSerialNumber() {
+        return declarationNumber + paymentType + HashUtil.hash(String.valueOf(System.currentTimeMillis()));
+    }
+}
+package com.blockch.service;
+import com.blockch.domain.PaymentOrder;
+import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+@Service
+public class ExchangeRateService {
+    private static final Map<String, Map<String, BigDecimal>> EXCHANGE_RATES = new HashMap<>();
+    static {
+        Map<String, BigDecimal> usdRates = new HashMap<>();
+        usdRates.put("CNY", BigDecimal.valueOf(6.5));
+        EXCHANGE_RATES.put("USD", usdRates);
+    }
+    public BigDecimal getExchangeRate(String currencyFrom, String currencyTo) {
+        return EXCHANGE_RATES.get(currencyFrom).get(currencyTo);
+    }
+}
+package com.blockch.service;
+import com.blockch.domain.PaymentOrder;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.http.HttpService;
+import org.web3j.tx.Contract;
+import org.web3j.tx.TransactionManager;
+import org.web3j.tx.gas.StaticGasProvider;
+import org.springframework.stereotype.Service;
+import java.math.BigInteger;
+@Service
+public class BlockchainAdapter {
+    private static final String CONTRACT_ADDRESS = "0x1234567890abcdef";
+    private static final String PRIVATE_KEY = "private_key";
+    public String sendTransaction(PaymentOrder paymentOrder) throws Exception {
+        Web3j web3j = Web3j.build(new HttpService());
+        TransactionManager transactionManager = new CustomTransactionManager(web3j, PRIVATE_KEY);
+        StaticGasProvider gasProvider = new StaticGasProvider(BigInteger.valueOf(2100000), BigInteger.valueOf(40000000000L));
+        Contract contract = Contract.load(CONTRACT_ADDRESS, web3j, transactionManager, gasProvider);
+        org.web3j.protocol.core.methods.response.TransactionReceipt receipt = contract.executeTransaction();
+        return receipt.getTransactionHash();
+    }
+    public boolean verifyTransaction(String transactionHash) throws Exception {
+        return true;
+    }
+}
+package com.blockch.service;
+import com.blockch.domain.PaymentOrder;
+import org.springframework.stereotype.Service;
+@Service
+public class SwiftAdapter {
+    public boolean isCompliant(PaymentOrder paymentOrder) {
+        return paymentOrder.getPaymentAmount().compareTo(BigDecimal.ZERO) > 0;
+    }
+    public String generateSwiftMessage(PaymentOrder paymentOrder) {
+        StringBuilder message = new StringBuilder();
+        message.append("MT103: ");
+        message.append("From: " + paymentOrder.getSenderAccount() + ", ");
+        message.append("To: " + paymentOrder.getReceiverAccount() + ", ");
+        message.append("Amount: " + paymentOrder.getPaymentAmount());
+        return message.toString();
+    }
+}
+package com.blockch.utils;
+import java.math.BigDecimal;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+public class HashUtil {
+    public static String hash(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes());
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                hexString.append(String.format("%02x", b));
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+package com.blockch.utils;
+import org.springframework.aop.MethodBeforeAdvice;
+import java.lang.reflect.Method;
+import java.util.Date;
+public class PaymentLogAspect implements MethodBeforeAdvice {
+    @Override
+    public void before(Method method, Object[] args, Object target) throws Throwable {
+        System.out.println("支付操作日志: " + new Date() + " - " + method.getName() + " 被调用");
+    }
+}
+package com.blockch.exception;
+public class PaymentValidationException extends RuntimeException {
+    public PaymentValidationException(String message) {
+        super(message);
+    }
+}
+8. 贸易争议管理模块关键代码
+package com.blockch.dispute.domain;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+import javax.persistence.*;
+import java.time.LocalDateTime;
+@Entity
+@Table(name = "disputes")
+@EntityListener(AuditingEntityListener.class)
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class Dispute {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String orderNumber; // 订单编号
+    private String evidenceHash; // 电子证据哈希
+    @Enumerated(EnumType.STRING)
+    private DisputeStatus status; // 争议状态机
+    @CreatedDate
+    private LocalDateTime createdAt;
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+    @JsonIgnore
+    public boolean isNew() {
+        return DisputeStatus.NEW.equals(status);
+    }
+    @JsonIgnore
+    public boolean isVerifying() {
+        return DisputeStatus.VERIFYING.equals(status);
+    }
+    @JsonIgnore
+    public boolean isArbitration() {
+        return DisputeStatus.ARBITRATION.equals(status);
+    }
+    @JsonIgnore
+    public boolean isClosed() {
+        return DisputeStatus.CLOSED.equals(status);
+    }
+}
+@Getter
+public enum DisputeStatus {
+    NEW("新建"),
+    VERIFYING("验证中"),
+    ARBITRATION("仲裁中"),
+    CLOSED("已关闭");
+    private final String description;
+    DisputeStatus(String description) {
+        this.description = description;
+    }
+}
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class MerkleNode {
+    private String hash;
+    private MerkleNode left;
+    private MerkleNode right;
+}
+package com.blockch.dispute.application;
+import com.blockch.dispute.domain.Dispute;
+import com.blockch.dispute.domain.DisputeStatus;
+import com.blockch.dispute.domain.MerkleNode;
+import com.blockch.dispute.infrastructure.DisputeRepository;
+import com.blockch.dispute.infrastructure.IPFSClientService;
+import com.blockch.dispute.infrastructure.MerkleTreeService;
+import com.google.common.hash.Hashing;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.statemachine.StateMachine;
+import org.springframework.statemachine.config.StateMachineFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import javax.validation.Valid;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+@Service
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class DisputeEvidenceValidator {
+    private static final Logger logger = LoggerFactory.getLogger(DisputeEvidenceValidator.class);
+    private final DisputeRepository disputeRepository;
+    private final IPFSClientService ipfsClientService;
+    private final MerkleTreeService merkleTreeService;
+    /**
+     * 证据链校验算法
+     * @param disputeId 争议ID
+     * @param merkleProof Merkle证明列表
+     * @param rootHash 根哈希
+     * @return 是否校验通过
+     */
+    @Transactional(readOnly = true)
+    public boolean validateEvidenceChain(Long disputeId, List<String> merkleProof, String rootHash) {
+        Dispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new IllegalArgumentException("Dispute not found with id: " + disputeId));
+        String evidenceHash = dispute.getEvidenceHash();
+        String ipfsHash = ipfsClientService.getIPFSHash(evidenceHash);
+        MerkleNode root = merkleTreeService.buildMerkleTree(ipfsHash);
+        boolean isValid = merkleTreeService.validateMerkleProof(root, merkleProof, evidenceHash);
+        if (isValid && rootHash.equals(merkleTreeService.getRootHash(root))) {
+            logger.info("Evidence chain validation passed for dispute {}", disputeId);
+            return true;
+        }
+        logger.error("Evidence chain validation failed for dispute {}", disputeId);
+        return false;
+    }
+}
+@Service
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class ArbitrationWorkflowEngine {
+    private static final Logger logger = LoggerFactory.getLogger(ArbitrationWorkflowEngine.class);
+    private final StateMachineFactory<DisputeStatus, String> stateMachineFactory;
+    private final DisputeRepository disputeRepository;
+    /**
+     * 状态转移规则引擎
+     * @param disputeId 争议ID
+     * @param event 事件
+     * @throws IllegalArgumentException 如果争议不存在
+     */
+    @Transactional
+    public void transitionState(Long disputeId, String event) {
+        Dispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new IllegalArgumentException("Dispute not found with id: " + disputeId));
+        StateMachine<DisputeStatus, String> stateMachine = stateMachineFactory.getStateMachine(disputeId);
+        stateMachine.start();
+        Message<String> message = MessageBuilder.withPayload(event).build();
+        boolean success = stateMachine.sendEvent(message);
+        if (success) {
+            DisputeStatus newStatus = stateMachine.getState().getId();
+            dispute.setStatus(newStatus);
+            disputeRepository.save(dispute);
+            logger.info("State transitioned for dispute {} to {}", disputeId, newStatus);
+        } else {
+            logger.error("State transition failed for dispute {}", disputeId);
+        }
+    }
+}
+@Service
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class BlockchainNotaryService {
+    private static final Logger logger = LoggerFactory.getLogger(BlockchainNotaryService.class);
+    private final Web3jService web3jService;
+    private final DisputeRepository disputeRepository;
+    /**
+     * 仲裁结果上链
+     * @param disputeId 争议ID
+     * @param arbitrationResult 仲裁结果
+     * @throws Exception 区块链相关异常
+     */
+    @Transactional
+    public void recordArbitrationResultOnChain(Long disputeId, String arbitrationResult) throws Exception {
+        Dispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new IllegalArgumentException("Dispute not found with id: " + disputeId));
+        String contractAddress = web3jService.deployArbitrationContract();
+        String transactionHash = web3jService.sendTransaction(contractAddress, arbitrationResult);
+        dispute.setArbitrationTransactionHash(transactionHash);
+        disputeRepository.save(dispute);
+        logger.info("Arbitration result recorded on chain for dispute {} with transaction hash {}", disputeId, transactionHash);
+    }
+}
+@Service
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class CaseAnalysisReporter {
+    private static final Logger logger = LoggerFactory.getLogger(CaseAnalysisReporter.class);
+    private final DisputeRepository disputeRepository;
+    private final SimilarCaseService similarCaseService;
+    /**
+     * 赔偿金额计算模型
+     * @param disputeId 争议ID
+     * @return 计算出的赔偿金额
+     */
+    @Transactional(readOnly = true)
+    public double calculateCompensationAmount(Long disputeId) {
+        Dispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new IllegalArgumentException("Dispute not found with id: " + disputeId));
+        List<Dispute> similarCases = similarCaseService.findSimilarCases(dispute);
+        if (similarCases.isEmpty()) {
+            logger.warn("No similar cases found for dispute {}", disputeId);
+            return 0;
+        }
+        double totalAmount = 0;
+        for (Dispute similarCase : similarCases) {
+            totalAmount += similarCase.getCompensationAmount();
+        }
+        double averageAmount = totalAmount / similarCases.size();
+        logger.info("Calculated compensation amount for dispute {} is {}", disputeId, averageAmount);
+        return averageAmount;
+    }
+}
+package com.blockch.dispute.infrastructure;
+import com.blockch.dispute.domain.Dispute;
+import com.blockch.dispute.domain.MerkleNode;
+import io.ipfs.api.IPFS;
+import io.ipfs.api.MerkleNode; 
+import io.ipfs.multihash.Multihash; 
+import org.springframework.stereotype.Service;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+@Service
+public class IPFSClientService {
+    private static final String IPFS_NODE_URL = "http://localhost:5001";
+    private final IPFS ipfs;
+    public IPFSClientService() throws Exception {
+        this.ipfs = new IPFS(IPFS_NODE_URL);
+    }
+    /**
+     * 获取IPFS哈希
+     * @param data 数据
+     * @return IPFS哈希
+     */
+    public String getIPFSHash(String data) {
+        try {
+            CompletableFuture<Multihash> future = ipfs.add(data.getBytes());
+            Multihash multihash = future.get();
+            return multihash.toString();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Failed to get IPFS hash", e);
+        }
+    }
+    /**
+     * 从IPFS获取数据
+     * @param ipfsHash IPFS哈希
+     * @return 数据
+     */
+    public String getIPFSData(String ipfsHash) {
+        try {
+            MerkleNode node = ipfs.cat(ipfsHash);
+            return new String(node.data);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get data from IPFS", e);
+        }
+    }
+}
+@Service
+public class MerkleTreeService {
+    /**
+     * 构建Merkle树
+     * @param data 数据
+     * @return Merkle树的根节点
+     */
+    public MerkleNode buildMerkleTree(String data) {
+        List<MerkleNode> leaves = new ArrayList<>();
+        leaves.add(MerkleNode.builder().hash(data).build());
+        return buildTree(leaves);
+    }
+    private MerkleNode buildTree(List<MerkleNode> nodes) {
+        if (nodes.size() == 1) {
+            return nodes.get(0);
+        }
+        List<MerkleNode> newNodes = new ArrayList<>();
+        for (int i = 0; i < nodes.size(); i += 2) {
+            MerkleNode left = nodes.get(i);
+            MerkleNode right = (i + 1 < nodes.size()) ? nodes.get(i + 1) : left;
+            String combinedHash = left.getHash() + right.getHash();
+            String parentHash = calculateHash(combinedHash);
+            MerkleNode parent = MerkleNode.builder().hash(parentHash).left(left).right(right).build();
+            newNodes.add(parent);
+        }
+        return buildTree(newNodes);
+    }
+    private String calculateHash(String data) {
+        return com.google.common.hash.Hashing.sha256()
+                .hashString(data, StandardCharsets.UTF_8)
+                .toString();
+    }
+    /**
+     * 获取根哈希
+     * @param root 根节点
+     * @return 根哈希
+     */
+    public String getRootHash(MerkleNode root) {
+        return root.getHash();
+    }
+    /**
+     * 验证Merkle证明
+     * @param root 根节点
+     * @param merkleProof Merkle证明列表
+     * @param leafHash 叶子哈希
+     * @return 是否验证通过
+     */
+    public boolean validateMerkleProof(MerkleNode root, List<String> merkleProof, String leafHash) {
+        String currentHash = leafHash;
+        for (String proofHash : merkleProof) {
+            boolean isLeft = root.getLeft().getHash().equals(currentHash);
+            String combinedHash = isLeft ? currentHash + proofHash : proofHash + currentHash;
+            currentHash = calculateHash(combinedHash);
+        }
+        return currentHash.equals(root.getHash());
+    }
+}
+import com.blockch.dispute.domain.Dispute;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Address;
+import org.web3j.abi.datatypes.Bool;
+import org.web3j.abi.datatypes.DynamicArray;
+import org.web3j.abi.datatypes.Function;
+import org.web3j.abi.datatypes.Type;
+import org.web3j.abi.datatypes.Utf8String;
+import org.web3j.abi.datatypes.generated.Uint256;
+import org.web3j.crypto.Credentials;
+import org.web3j.crypto.RawTransaction;
+import org.web3j.crypto.TransactionEncoder;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.request.Transaction;
+import org.web3j.protocol.core.methods.response.EthCall;
+import org.web3j.protocol.core.methods.response.EthSendTransaction;
+import org.web3j.protocol.http.HttpService;
+import org.web3j.tx.Contract;
+import org.web3j.tx.TransactionManager;
+import org.web3j.tx.gas.ContractGasProvider;
+import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.utils.Convert;
+import org.web3j.utils.Numeric;
+import org.springframework.stereotype.Service;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+@Service
+public class Web3jService {
+    private static final String INFURA_URL = "https://mainnet.infura.io/v3/YOUR_PROJECT_ID";
+    private static final String PRIVATE_KEY = "YOUR_PRIVATE_KEY";
+    private final Web3j web3j;
+    private final Credentials credentials;
+    private final ContractGasProvider gasProvider;
+    public Web3jService() {
+        this.web3j = Web3j.build(new HttpService(INFURA_URL));
+        this.credentials = Credentials.create(PRIVATE_KEY);
+        this.gasProvider = new DefaultGasProvider();
+    }
+    /**
+     * 部署仲裁合约
+     * @return 合约地址
+     * @throws Exception 部署异常
+     */
+    public String deployArbitrationContract() throws Exception {
+        String contractBytecode = "YOUR_CONTRACT_BYTECODE";
+        String contractAbi = "YOUR_CONTRACT_ABI";
+        TransactionManager transactionManager = new RawTransactionManager(web3j, credentials);
+        ArbitrationContract contract = ArbitrationContract.deploy(web3j, transactionManager, gasProvider, contractBytecode).send();
+        return contract.getContractAddress();
+    }
+    /**
+     * 发送交易
+     * @param contractAddress 合约地址
+     * @param arbitrationResult 仲裁结果
+     * @return 交易哈希
+     * @throws Exception 交易异常
+     */
+    public String sendTransaction(String contractAddress, String arbitrationResult) throws Exception {
+        Function function = new Function(
+                "recordResult",
+                Arrays.asList(new Utf8String(arbitrationResult)),
+                Collections.emptyList());
+        String encodedFunction = Contract.encodeFunctionCall(function);
+        Transaction transaction = Transaction.createEthCallTransaction(
+                credentials.getAddress(),
+                contractAddress,
+                encodedFunction);
+        EthCall ethCall = web3j.ethCall(transaction, DefaultBlockParameterName.LATEST).send();
+        BigInteger gas = ethCall.getGasUsed();
+        RawTransaction rawTransaction = RawTransaction.createTransaction(
+                nonce(),
+                gasProvider.getGasPrice(),
+                gasProvider.getGasLimit(),
+                contractAddress,
+                BigInteger.ZERO,
+                encodedFunction);
+        byte[] signedMessage = TransactionEncoder.signMessage(rawTransaction, credentials);
+        String hexValue = Numeric.toHexString(signedMessage);
+        EthSendTransaction ethSendTransaction = web3j.ethSendRawTransaction(hexValue).send();
+        return ethSendTransaction.getTransactionHash();
+    }
+    private BigInteger nonce() throws IOException, ExecutionException, InterruptedException {
+        return web3j.ethGetTransactionCount(credentials.getAddress(), DefaultBlockParameterName.PENDING).send().getTransactionCount();
+    }
+}
+import com.blockch.dispute.domain.Dispute;
+import org.springframework.data.jpa.repository.JpaRepository;
+public interface DisputeRepository extends JpaRepository<Dispute, Long> {
+}
+import lombok.Getter;
+@Getter
+public class EvidenceVerificationFailedException extends RuntimeException {
+    private final String message;
+    public EvidenceVerificationFailedException(String message) {
+        this.message = message;
+    }
+}
